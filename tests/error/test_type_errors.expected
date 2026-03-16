@@ -1,0 +1,3 @@
+tests/error/test_type_errors.fg:5:5: error: type mismatch in variable 'x': expected int, got str
+tests/error/test_type_errors.fg:6:5: error: type mismatch in variable 'y': expected str, got int
+tests/error/test_type_errors.fg:7:5: error: type mismatch in variable 'z': expected bool, got float

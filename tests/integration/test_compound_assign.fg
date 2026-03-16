@@ -1,0 +1,72 @@
+# Integration: compound assignment operators in real-world patterns
+
+proc main() -> void:
+    # Basic compound operators
+    var x: int = 10
+    x += 5
+    print(x)
+    x -= 3
+    print(x)
+    x *= 4
+    print(x)
+    x /= 6
+    print(x)
+    x %= 5
+    print(x)
+
+    # Compound assignment in while loop (the exact bug pattern)
+    var sum: int = 0
+    var i: int = 1
+    while i <= 100:
+        sum += i
+        i += 1
+    print(sum)
+
+    # Compound assignment in for loop
+    var product: int = 1
+    for n in range(1, 11):
+        product *= n
+    print(product)
+
+    # Nested loops with compound assignment
+    var total: int = 0
+    for row in range(0, 5):
+        for col in range(0, 5):
+            total += row * col
+        total += 1
+    print(total)
+
+    # Compound with negative values
+    var neg: int = 100
+    neg -= 200
+    print(neg)
+    neg += 50
+    print(neg)
+
+    # Compound in if branches
+    var score: int = 0
+    for val in range(1, 21):
+        if val % 3 == 0:
+            score += 3
+        elif val % 2 == 0:
+            score -= 1
+        else:
+            score += 1
+    print(score)
+
+    # Accumulator pattern with modulo
+    var checksum: int = 0
+    for j in range(0, 256):
+        checksum += j
+        checksum %= 1000
+    print(checksum)
+
+    # While loop counting down
+    var countdown: int = 50
+    var steps: int = 0
+    while countdown > 0:
+        countdown -= 7
+        steps += 1
+    print(steps)
+    print(countdown)
+

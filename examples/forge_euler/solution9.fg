@@ -1,0 +1,23 @@
+# Project Euler - Problem 9: Special Pythagorean Triplet
+#
+# A Pythagorean triplet is a set of three natural numbers, a < b < c,
+# for which a^2 + b^2 = c^2.
+# There exists exactly one Pythagorean triplet for which a + b + c = 1000.
+# Find the product abc.
+# Answer: 31875000
+
+proc main() -> void:
+    var answer: int = 0
+    var a: int = 1
+    while a < 998:
+        var b: int = a + 1
+        while b < 999:
+            var c: int = 1000 - a - b
+            if c > b and a * a + b * b == c * c:
+                answer = a * b * c
+                b = 999
+                a = 998
+            b += 1
+        a += 1
+    print("Project Euler - Problem 9")
+    print("Product of Pythagorean triplet that sums to 1000: " + str(answer))

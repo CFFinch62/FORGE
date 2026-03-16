@@ -1,0 +1,8 @@
+# Error test: type mismatches should be caught by the checker
+# Expected: type checker errors (non-zero exit), specific error messages
+
+proc main() -> void:
+    var x: int = "hello"
+    var y: str = 42
+    var z: bool = 3.14
+

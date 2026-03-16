@@ -1,0 +1,27 @@
+# Beginner example: Optional types in FORGE
+
+proc find_index(nums: []int, target: int) -> ?int:
+    for i in range(0, len(nums)):
+        if nums[i] == target:
+            return some(i)
+    return none
+
+proc describe_search(nums: []int, target: int) -> void:
+    var found: ?int = find_index(nums, target)
+
+    if found is some:
+        print("Found " + str(target) + " in the list")
+    else:
+        print("Did not find " + str(target))
+
+    var index_or_default: int = found or_else -1
+    print("Index or default: " + str(index_or_default))
+
+proc main() -> void:
+    var scores: []int = [81, 94, 76, 88]
+
+    describe_search(scores, 94)
+    describe_search(scores, 50)
+
+    var maybe_bonus: ?int = none
+    print("Bonus points: " + str(maybe_bonus or_else 0))

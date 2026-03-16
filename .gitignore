@@ -1,0 +1,25 @@
+# Build artifacts
+*.o
+*.a
+forge
+forge-build/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Debug
+*.dSYM/
+core
+vgcore.*
+
+# Test output
+tests/output/
+
+# OS files
+.DS_Store
+Thumbs.db
+

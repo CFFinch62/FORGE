@@ -1,0 +1,31 @@
+# Project Euler - Problem 7: 10001st Prime
+#
+# By listing the first six prime numbers: 2, 3, 5, 7, 11, and 13,
+# we can see that the 6th prime is 13.
+#
+# What is the 10001st prime number?
+# Answer: 104743
+
+proc is_prime(n: int) -> bool:
+    if n < 2:
+        return false
+    if n == 2:
+        return true
+    if n % 2 == 0:
+        return false
+    var d: int = 3
+    while d * d <= n:
+        if n % d == 0:
+            return false
+        d += 2
+    return true
+
+proc main() -> void:
+    var count: int = 0
+    var candidate: int = 1
+    while count < 10001:
+        candidate += 1
+        if is_prime(candidate):
+            count += 1
+    print("Project Euler - Problem 7")
+    print("The 10001st prime number: " + str(candidate))

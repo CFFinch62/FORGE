@@ -1,0 +1,9 @@
+# Error test: wrong number of arguments should be caught
+# Expected: error about argument count mismatch
+
+proc add(a: int, b: int) -> int:
+    return a + b
+
+proc main() -> void:
+    var result: int = add(1, 2, 3)
+

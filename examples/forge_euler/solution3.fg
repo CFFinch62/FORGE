@@ -1,0 +1,25 @@
+# Project Euler - Problem 3: Largest Prime Factor
+#
+# The prime factors of 13195 are 5, 7, 13 and 29.
+#
+# What is the largest prime factor of the number 600851475143?
+# Answer: 6857
+
+proc main() -> void:
+    var n: int = 600851475143
+    var factor: int = 2
+    var largest: int = 1
+
+    # Divide out all small factors, keeping track of the largest
+    while factor * factor <= n:
+        while n % factor == 0:
+            largest = factor
+            n = n / factor
+        factor += 1
+
+    # If n > 1 then n itself is the largest prime factor
+    if n > 1:
+        largest = n
+
+    print("Project Euler - Problem 3")
+    print("Largest prime factor of 600851475143: " + str(largest))

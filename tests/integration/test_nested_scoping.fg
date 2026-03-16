@@ -1,0 +1,75 @@
+# Integration: nested scoping, shadowing, mutation across blocks
+
+proc main() -> void:
+    # Variable shadowing in nested blocks
+    var x: int = 1
+    print(x)
+    if true:
+        var x: int = 2
+        print(x)
+        if true:
+            var x: int = 3
+            print(x)
+        print(x)
+    print(x)
+
+    # Mutation visible within same scope
+    var counter: int = 0
+    for i in range(0, 5):
+        counter += 1
+    print(counter)
+
+    # Mutation in nested while
+    var outer: int = 0
+    var inner_total: int = 0
+    while outer < 3:
+        var inner: int = 0
+        while inner < 4:
+            inner_total += 1
+            inner += 1
+        outer += 1
+    print(inner_total)
+
+    # Shadowing in for loop
+    var val: int = 999
+    for val in range(0, 3):
+        print(val)
+    # After for loop, original val should be restored or loop var is scoped
+    # (depends on language semantics - this tests what actually happens)
+
+    # If-elif-else scoping
+    var result: str = "none"
+    var test_val: int = 42
+    if test_val > 100:
+        var result: str = "high"
+        print(result)
+    elif test_val > 50:
+        var result: str = "medium"
+        print(result)
+    elif test_val > 0:
+        var result: str = "low"
+        print(result)
+    else:
+        var result: str = "negative"
+        print(result)
+    print(result)
+
+    # Nested loop with break
+    var found: int = -1
+    for i in range(0, 10):
+        for j in range(0, 10):
+            if i * 10 + j == 37:
+                found = i * 10 + j
+                break
+        if found >= 0:
+            break
+    print(found)
+
+    # Continue in nested context
+    var skip_sum: int = 0
+    for i in range(0, 20):
+        if i % 3 == 0:
+            continue
+        skip_sum += i
+    print(skip_sum)
+

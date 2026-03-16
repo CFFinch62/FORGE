@@ -1,0 +1,3 @@
+Runtime error: Division by zero
+  at tests/error/test_division_by_zero.fg:7:20
+  in proc main() at line 4

@@ -1,0 +1,71 @@
+# Integration test: string building, with alloc, free
+
+import forge.str
+
+proc repeat_char(ch: str, n: int) -> str:
+    var result: str = ""
+    for i in range(0, n):
+        result = result + ch
+    return result
+
+proc join_with(items: []str, sep: str) -> str:
+    var result: str = ""
+    for i in range(0, len(items)):
+        if i > 0:
+            result = result + sep
+        result = result + items[i]
+    return result
+
+proc main() -> void:
+    # String building in loop
+    var s: str = ""
+    for i in range(0, 5):
+        s = s + str(i)
+    print(s)
+
+    # String concatenation accumulator
+    var csv: str = ""
+    for i in range(1, 6):
+        if i > 1:
+            csv = csv + ","
+        csv = csv + str(i * 10)
+    print(csv)
+
+    # String procedure
+    print(repeat_char("*", 10))
+
+    # Array of strings joined
+    var words: []str = ["hello", "world", "from", "forge"]
+    print(join_with(words, " "))
+
+    # String comparison in loop
+    var match_count: int = 0
+    var targets: []str = ["a", "b", "c", "b", "a", "b"]
+    for i in range(0, len(targets)):
+        if targets[i] == "b":
+            match_count += 1
+    print(match_count)
+
+    # String length in loop
+    var total_len: int = 0
+    for i in range(0, len(words)):
+        total_len += len(words[i])
+    print(total_len)
+
+    # with alloc for array
+    with alloc(int, 100) as buf:
+        for i in range(0, 100):
+            buf[i] = i * i
+        var sq_sum: int = 0
+        for i in range(0, 100):
+            sq_sum += buf[i]
+        print(sq_sum)
+
+    # Nested string operations
+    var num_str: str = ""
+    for i in range(0, 10):
+        num_str = num_str + str(i)
+    print(len(num_str))
+    print(forge.str.contains(num_str, "456"))
+    print(forge.str.char_at(num_str, 5))
+

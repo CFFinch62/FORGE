@@ -1,0 +1,1 @@
+tests/error/test_wrong_arg_count.fg:8:26: error: wrong number of arguments to 'add': expected 2, got 3

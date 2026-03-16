@@ -1,0 +1,6 @@
+# Error test: using undefined variables should be caught
+# Expected: checker error about undefined variable
+
+proc main() -> void:
+    print(undefined_variable)
+

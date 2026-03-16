@@ -1,0 +1,58 @@
+# Regression test: array deep-copy on every index read
+# Bug: sieve[i] copied the entire array via val_copy on each access
+# This made O(1) lookups become O(n), causing O(n^2) or worse for loops
+# Fixed in: interp.c NODE_INDEX uses env_get_ptr for identifier base
+
+proc main() -> void:
+    # Medium array with indexed reads in loop - must complete in < 1 second
+    with alloc(int, 5000) as arr:
+        # Write all elements
+        for i in range(0, 5000):
+            arr[i] = i * 3
+
+        # Read all elements (this was the catastrophic path)
+        var total: int = 0
+        for i in range(0, 5000):
+            total += arr[i]
+        print(total)
+
+        # Verify specific indices
+        print(arr[0])
+        print(arr[2500])
+        print(arr[4999])
+
+    # Sieve pattern - the exact scenario that exposed the bug
+    var limit: int = 1000
+    with alloc(int, limit) as sieve:
+        for i in range(0, limit):
+            sieve[i] = 0
+        sieve[0] = 1
+        sieve[1] = 1
+        var p: int = 2
+        while p * p < limit:
+            if sieve[p] == 0:
+                var j: int = p * p
+                while j < limit:
+                    sieve[j] = 1
+                    j += p
+            p += 1
+
+        var prime_count: int = 0
+        for i in range(0, limit):
+            if sieve[i] == 0:
+                prime_count += 1
+        print(prime_count)
+
+    # Array modification in loop
+    with alloc(int, 100) as data:
+        for i in range(0, 100):
+            data[i] = i
+        # Double every element
+        for i in range(0, 100):
+            data[i] = data[i] * 2
+        # Sum
+        var s: int = 0
+        for i in range(0, 100):
+            s += data[i]
+        print(s)
+

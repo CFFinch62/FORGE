@@ -1,0 +1,75 @@
+# Integration: arrays at medium/large scale with indexed operations
+
+proc main() -> void:
+    # Build array with append, verify with indexing
+    var nums: []int = []
+    for i in range(0, 100):
+        nums = append(nums, i * 2)
+    print(len(nums))
+    print(nums[0])
+    print(nums[50])
+    print(nums[99])
+
+    # Sum via index
+    var sum: int = 0
+    for i in range(0, len(nums)):
+        sum += nums[i]
+    print(sum)
+
+    # Modify array elements in loop
+    for i in range(0, len(nums)):
+        nums[i] = nums[i] + 1
+    print(nums[0])
+    print(nums[99])
+
+    # Build larger array and sum
+    var big: []int = []
+    for i in range(0, 1000):
+        big = append(big, i)
+    var big_sum: int = 0
+    for i in range(0, 1000):
+        big_sum += big[i]
+    print(big_sum)
+
+    # Reverse check: verify first and last
+    print(big[0])
+    print(big[999])
+
+    # Sieve pattern at smaller scale (primes below 200)
+    var limit: int = 200
+    with alloc(int, limit) as sieve:
+        for i in range(0, limit):
+            sieve[i] = 1
+        sieve[0] = 0
+        sieve[1] = 0
+        var p: int = 2
+        while p * p < limit:
+            if sieve[p] == 1:
+                var j: int = p * p
+                while j < limit:
+                    sieve[j] = 0
+                    j += p
+            p += 1
+
+        # Count primes
+        var prime_count: int = 0
+        for i in range(0, limit):
+            if sieve[i] == 1:
+                prime_count += 1
+        print(prime_count)
+
+    # Array of strings
+    var names: []str = ["alpha", "bravo", "charlie", "delta"]
+    print(len(names))
+    print(names[2])
+
+    # Boolean array
+    var flags: []bool = []
+    for i in range(0, 10):
+        flags = append(flags, i % 2 == 0)
+    var true_count: int = 0
+    for i in range(0, 10):
+        if flags[i]:
+            true_count += 1
+    print(true_count)
+

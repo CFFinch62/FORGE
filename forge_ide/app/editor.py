@@ -1,0 +1,561 @@
+"""
+Code Editor Widget for FORGE IDE
+Provides a code editor with line numbers and syntax highlighting
+"""
+
+from PyQt6.QtWidgets import QPlainTextEdit, QWidget, QTextEdit, QTabWidget
+from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QTextFormat, QFont, QTextCursor
+
+from forge_ide.app.syntax import PlainHighlighter
+from forge_ide.app.themes import UITheme, SyntaxColors
+from forge_ide.app.settings import SettingsManager
+
+
+class LineNumberArea(QWidget):
+    """Widget for displaying line numbers in the editor gutter"""
+
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.editor = editor
+
+    def sizeHint(self) -> QSize:
+        return QSize(self.editor.line_number_area_width(), 0)
+
+    def paintEvent(self, event):
+        self.editor.line_number_area_paint_event(event)
+
+
+class CodeEditor(QPlainTextEdit):
+    """Code editor with line numbers and syntax highlighting"""
+
+    file_modified = pyqtSignal(bool)
+
+    def __init__(self, parent=None, ui_theme: UITheme = None,
+                 syntax_theme: SyntaxColors = None, settings: SettingsManager = None):
+        super().__init__(parent)
+        self.ui_theme = ui_theme
+        self.syntax_theme = syntax_theme
+        self.settings = settings
+        self.file_path = None
+        self._modified = False
+
+        # Create line number area
+        self.line_number_area = LineNumberArea(self)
+
+        # Create syntax highlighter
+        self.highlighter = PlainHighlighter(self.document(), syntax_theme)
+
+        # Connect signals
+        self.blockCountChanged.connect(self.update_line_number_area_width)
+        self.updateRequest.connect(self.update_line_number_area)
+        self.cursorPositionChanged.connect(self.highlight_current_line)
+        self.textChanged.connect(self._on_text_changed)
+
+        # Initial setup
+        self.update_line_number_area_width(0)
+        self.highlight_current_line()
+        self.apply_settings()
+    
+    def apply_settings(self):
+        """Apply editor settings"""
+        if self.settings:
+            s = self.settings.settings.editor
+
+            # Set font programmatically - this is critical for immediate update
+            font = QFont(s.font_family, s.font_size)
+            font.setStyleHint(QFont.StyleHint.Monospace)
+            self.setFont(font)
+
+            # Also set font on line number area
+            self.line_number_area.setFont(font)
+
+            # Update tab stop distance
+            self.setTabStopDistance(s.tab_width * self.fontMetrics().horizontalAdvance(' '))
+
+            # Update word wrap
+            self.setLineWrapMode(
+                QPlainTextEdit.LineWrapMode.WidgetWidth if s.word_wrap
+                else QPlainTextEdit.LineWrapMode.NoWrap
+            )
+
+            # Update line number visibility
+            self.line_number_area.setVisible(s.show_line_numbers)
+            self.update_line_number_area_width(0)
+
+            # Re-highlight current line based on settings
+            self.highlight_current_line()
+
+            # Re-apply UI theme to update stylesheet with new font settings
+            if self.ui_theme:
+                self.apply_ui_theme(self.ui_theme)
+
+            # Force immediate visual update
+            self.update()
+            self.viewport().update()
+            self.line_number_area.update()
+    
+    def apply_ui_theme(self, ui_theme: UITheme):
+        """Apply UI theme to editor"""
+        self.ui_theme = ui_theme
+
+        # Get font settings to include in stylesheet
+        font_family = "monospace"
+        font_size = 12
+        if self.settings and self.settings.settings.editor:
+            font_family = self.settings.settings.editor.font_family
+            font_size = self.settings.settings.editor.font_size
+
+        # Set editor colors and font via stylesheet
+        self.setStyleSheet(f"""
+            QPlainTextEdit {{
+                background-color: {ui_theme.editor_background};
+                color: {ui_theme.editor_foreground};
+                selection-background-color: {ui_theme.editor_selection};
+                border: none;
+                font-family: "{font_family}";
+                font-size: {font_size}pt;
+            }}
+        """)
+
+        # Update tab stop distance based on current font metrics
+        if self.settings and self.settings.settings.editor:
+            self.setTabStopDistance(
+                self.settings.settings.editor.tab_width *
+                self.fontMetrics().horizontalAdvance(' ')
+            )
+
+        self.highlight_current_line()
+        self.viewport().update()
+        self.line_number_area.update()
+    
+    def apply_syntax_theme(self, syntax_theme: SyntaxColors):
+        """Apply syntax theme to editor"""
+        self.syntax_theme = syntax_theme
+        self.highlighter.set_syntax_theme(syntax_theme)
+    
+    def line_number_area_width(self) -> int:
+        """Calculate width needed for the line number gutter"""
+        digits = len(str(max(1, self.blockCount())))
+        space = 8 + self.fontMetrics().horizontalAdvance('9') * digits
+        return space
+    
+    def update_line_number_area_width(self, _):
+        """Update editor margins for line number area"""
+        self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
+    
+    def update_line_number_area(self, rect, dy):
+        """Update line number area when editor scrolls"""
+        if dy:
+            self.line_number_area.scroll(0, dy)
+        else:
+            self.line_number_area.update(0, rect.y(), self.line_number_area.width(), rect.height())
+        
+        if rect.contains(self.viewport().rect()):
+            self.update_line_number_area_width(0)
+    
+    def keyPressEvent(self, event):
+        """Handle key press events for auto-indentation"""
+        if event.key() == Qt.Key.Key_Return or event.key() == Qt.Key.Key_Enter:
+            # Check previous line for indentation logic
+            cursor = self.textCursor()
+            block = cursor.block()
+            text = block.text()
+            
+            # Allow default behavior to create the new line
+            super().keyPressEvent(event)
+            
+            # Now determine indentation for the new line
+            cursor = self.textCursor()
+            prev_block = cursor.block().previous()
+            
+            if prev_block.isValid():
+                prev_text = prev_block.text().rstrip()
+                
+                # Calculate indentation of previous line
+                indent = len(prev_text) - len(prev_text.lstrip())
+                
+                # If previous line ends with ':', increase indent (for imports/records)
+                # OR if it starts with a block keyword (if, loop, task, etc.)
+                should_indent = False
+                
+                # Check for colons (imports, records)
+                if prev_text.endswith(':'):
+                    should_indent = True
+                else:
+                    # Check for keywords
+                    # Split into words to check first word
+                    parts = prev_text.strip().split()
+                    if parts:
+                        keyword = parts[0]
+                        block_keywords = {'task', 'loop', 'choose', 'choice', 'default', 'attempt', 'handle', 'ensure', 'record', 'else'}
+                        if keyword in block_keywords:
+                            should_indent = True
+                        elif keyword == 'if':
+                             # Only indent 'if' if it's not a single-line 'if ... then ...'
+                             # Heuristic: check if 'then' is present
+                             if ' then ' not in prev_text and not prev_text.endswith(' then'):
+                                 should_indent = True
+
+                if should_indent:
+                    indent += 4
+                
+                # Apply indentation
+                if indent > 0:
+                    cursor.insertText(" " * indent)
+        else:
+            super().keyPressEvent(event)
+
+    def resizeEvent(self, event):
+        """Handle resize events"""
+        super().resizeEvent(event)
+        cr = self.contentsRect()
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), 
+                                                 self.line_number_area_width(), cr.height()))
+    
+    def line_number_area_paint_event(self, event):
+        """Paint line numbers in the gutter"""
+        painter = QPainter(self.line_number_area)
+
+        if self.ui_theme:
+            painter.fillRect(event.rect(), QColor(self.ui_theme.editor_gutter_bg))
+            text_color = QColor(self.ui_theme.editor_gutter_fg)
+        else:
+            painter.fillRect(event.rect(), QColor("#1e1e2e"))
+            text_color = QColor("#6c7086")
+
+        painter.setPen(text_color)
+
+        block = self.firstVisibleBlock()
+        block_number = block.blockNumber()
+        top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
+        bottom = top + round(self.blockBoundingRect(block).height())
+
+        while block.isValid() and top <= event.rect().bottom():
+            if block.isVisible() and bottom >= event.rect().top():
+                number = str(block_number + 1)
+                painter.drawText(0, top, self.line_number_area.width() - 4,
+                               self.fontMetrics().height(),
+                               Qt.AlignmentFlag.AlignRight, number)
+
+            block = block.next()
+            top = bottom
+            bottom = top + round(self.blockBoundingRect(block).height())
+            block_number += 1
+
+    def _get_bracket_matches(self):
+        """Find and highlight matching brackets"""
+        extra_selections = []
+
+        if not self.ui_theme:
+            return extra_selections
+
+        cursor = self.textCursor()
+        text = self.toPlainText()
+        pos = cursor.position()
+
+        # Check if cursor is next to a bracket
+        bracket_pairs = {
+            '(': ')', ')': '(',
+            '[': ']', ']': '[',
+            '{': '}', '}': '{'
+        }
+
+        # Check character before cursor
+        char_before = text[pos - 1] if pos > 0 else ''
+        # Check character at cursor
+        char_at = text[pos] if pos < len(text) else ''
+
+        bracket_char = None
+        bracket_pos = None
+        is_opening = False
+
+        if char_before in bracket_pairs:
+            bracket_char = char_before
+            bracket_pos = pos - 1
+            is_opening = char_before in '([{'
+        elif char_at in bracket_pairs:
+            bracket_char = char_at
+            bracket_pos = pos
+            is_opening = char_at in '([{'
+
+        if bracket_char and bracket_pos is not None:
+            # Find matching bracket
+            match_pos = self._find_matching_bracket(text, bracket_pos, bracket_char, is_opening)
+
+            if match_pos is not None:
+                # Highlight both brackets
+                bracket_color = QColor(self.ui_theme.editor_foreground)
+                bracket_color.setAlpha(200)
+
+                # Highlight the bracket at cursor
+                selection1 = QTextEdit.ExtraSelection()
+                selection1.format.setBackground(QColor("#555555"))
+                selection1.format.setForeground(QColor("#FFD700"))  # Gold color
+                cursor1 = QTextCursor(self.document())
+                cursor1.setPosition(bracket_pos)
+                cursor1.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.KeepAnchor)
+                selection1.cursor = cursor1
+                extra_selections.append(selection1)
+
+                # Highlight the matching bracket
+                selection2 = QTextEdit.ExtraSelection()
+                selection2.format.setBackground(QColor("#555555"))
+                selection2.format.setForeground(QColor("#FFD700"))  # Gold color
+                cursor2 = QTextCursor(self.document())
+                cursor2.setPosition(match_pos)
+                cursor2.movePosition(QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.KeepAnchor)
+                selection2.cursor = cursor2
+                extra_selections.append(selection2)
+
+        return extra_selections
+
+    def _find_matching_bracket(self, text, pos, bracket, is_opening):
+        """Find the position of the matching bracket"""
+        bracket_pairs = {
+            '(': ')', ')': '(',
+            '[': ']', ']': '[',
+            '{': '}', '}': '{'
+        }
+
+        target = bracket_pairs[bracket]
+        direction = 1 if is_opening else -1
+        depth = 0
+
+        i = pos
+        while 0 <= i < len(text):
+            char = text[i]
+
+            if char == bracket:
+                depth += 1
+            elif char == target:
+                depth -= 1
+                if depth == 0:
+                    return i
+
+            i += direction
+
+        return None
+
+    def highlight_current_line(self):
+        """Highlight the current line and matching brackets"""
+        extra_selections = []
+
+        # Check if highlighting is enabled in settings
+        should_highlight = True
+        if self.settings and self.settings.settings.editor:
+            should_highlight = self.settings.settings.editor.highlight_current_line
+
+        if not self.isReadOnly() and self.ui_theme and should_highlight:
+            selection = QTextEdit.ExtraSelection()
+            line_color = QColor(self.ui_theme.editor_line_highlight)
+            selection.format.setBackground(line_color)
+            selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+            selection.cursor = self.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+
+        # Add bracket matching highlights
+        if self.settings and self.settings.settings.editor.bracket_matching:
+            bracket_selections = self._get_bracket_matches()
+            extra_selections.extend(bracket_selections)
+
+        self.setExtraSelections(extra_selections)
+    
+    def _on_text_changed(self):
+        """Handle text changes"""
+        if not self._modified:
+            self._modified = True
+            self.file_modified.emit(True)
+    
+    def set_modified(self, modified: bool):
+        """Set the modified state"""
+        self._modified = modified
+        self.file_modified.emit(modified)
+    
+    def is_modified(self) -> bool:
+        """Check if document has been modified"""
+        return self._modified
+
+    def indent_selection(self):
+        """Indent the selected lines by one level (4 spaces)"""
+        cursor = self.textCursor()
+        
+        # If no selection, indent current line
+        if not cursor.hasSelection():
+            cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+            cursor.insertText("    ")
+            return
+        
+        # Get selection range
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        
+        # Move to start of selection
+        cursor.setPosition(start)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+        start_block = cursor.blockNumber()
+        
+        # Move to end of selection
+        cursor.setPosition(end)
+        # If cursor is at start of line, don't include that line
+        if cursor.positionInBlock() == 0 and start_block != cursor.blockNumber():
+            cursor.movePosition(QTextCursor.MoveOperation.PreviousBlock)
+        end_block = cursor.blockNumber()
+        
+        # Indent each line in the selection
+        cursor.beginEditBlock()
+        for block_num in range(start_block, end_block + 1):
+            cursor.setPosition(self.document().findBlockByNumber(block_num).position())
+            cursor.insertText("    ")
+        cursor.endEditBlock()
+    
+    def dedent_selection(self):
+        """Dedent the selected lines by one level (up to 4 spaces)"""
+        cursor = self.textCursor()
+        
+        # If no selection, dedent current line
+        if not cursor.hasSelection():
+            cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+            block = cursor.block()
+            text = block.text()
+            # Remove up to 4 leading spaces
+            spaces_to_remove = 0
+            for char in text[:4]:
+                if char == ' ':
+                    spaces_to_remove += 1
+                else:
+                    break
+            if spaces_to_remove > 0:
+                cursor.movePosition(QTextCursor.MoveOperation.Right, 
+                                  QTextCursor.MoveMode.KeepAnchor, spaces_to_remove)
+                cursor.removeSelectedText()
+            return
+        
+        # Get selection range
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        
+        # Move to start of selection
+        cursor.setPosition(start)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+        start_block = cursor.blockNumber()
+        
+        # Move to end of selection
+        cursor.setPosition(end)
+        # If cursor is at start of line, don't include that line
+        if cursor.positionInBlock() == 0 and start_block != cursor.blockNumber():
+            cursor.movePosition(QTextCursor.MoveOperation.PreviousBlock)
+        end_block = cursor.blockNumber()
+        
+        # Dedent each line in the selection
+        cursor.beginEditBlock()
+        for block_num in range(start_block, end_block + 1):
+            block = self.document().findBlockByNumber(block_num)
+            cursor.setPosition(block.position())
+            text = block.text()
+            # Remove up to 4 leading spaces
+            spaces_to_remove = 0
+            for char in text[:4]:
+                if char == ' ':
+                    spaces_to_remove += 1
+                else:
+                    break
+            if spaces_to_remove > 0:
+                cursor.movePosition(QTextCursor.MoveOperation.Right, 
+                                  QTextCursor.MoveMode.KeepAnchor, spaces_to_remove)
+                cursor.removeSelectedText()
+        cursor.endEditBlock()
+    
+    def comment_selection(self):
+        """Convert selected lines to comments (rem: for single line, note: for multi-line)"""
+        cursor = self.textCursor()
+        
+        # If no selection, just insert note: on current line
+        if not cursor.hasSelection():
+            cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+            cursor.insertText("note:\n    ")
+            return
+        
+        # Get selection range
+        start = cursor.selectionStart()
+        end = cursor.selectionEnd()
+        
+        # Move to start of selection
+        cursor.setPosition(start)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfLine)
+        start_block = cursor.blockNumber()
+        start_pos = cursor.position()
+        
+        # Move to end of selection
+        cursor.setPosition(end)
+        # If cursor is at start of line, don't include that line
+        if cursor.positionInBlock() == 0 and start_block != cursor.blockNumber():
+            cursor.movePosition(QTextCursor.MoveOperation.PreviousBlock)
+        cursor.movePosition(QTextCursor.MoveOperation.EndOfLine)
+        end_block = cursor.blockNumber()
+        
+        # Check if single line or multi-line
+        is_single_line = (start_block == end_block)
+        
+        cursor.beginEditBlock()
+        
+        if is_single_line:
+            # Single line - use rem:
+            block = self.document().findBlockByNumber(start_block)
+            line = block.text()
+            indent = len(line) - len(line.lstrip())
+            indent_str = " " * indent
+            
+            # Create rem: comment
+            commented_line = indent_str + "rem: " + line.lstrip()
+            
+            # Replace the line
+            cursor.setPosition(start_pos)
+            cursor.setPosition(block.position() + len(block.text()),
+                              QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            cursor.insertText(commented_line)
+        else:
+            # Multi-line - use note: block
+            # Get the minimum indentation of selected lines
+            min_indent = float('inf')
+            for block_num in range(start_block, end_block + 1):
+                block = self.document().findBlockByNumber(block_num)
+                text = block.text()
+                if text.strip():  # Only consider non-empty lines
+                    indent = len(text) - len(text.lstrip())
+                    min_indent = min(min_indent, indent)
+            
+            if min_indent == float('inf'):
+                min_indent = 0
+            
+            # Collect all lines
+            lines = []
+            for block_num in range(start_block, end_block + 1):
+                block = self.document().findBlockByNumber(block_num)
+                lines.append(block.text())
+            
+            # Create the note: block
+            indent_str = " " * min_indent
+            commented_lines = [indent_str + "note:"]
+            for line in lines:
+                if line.strip():  # Non-empty line
+                    # Remove the minimum indentation and add 4 spaces
+                    dedented = line[min_indent:] if len(line) >= min_indent else line
+                    commented_lines.append(indent_str + "    " + dedented)
+                else:
+                    # Empty line
+                    commented_lines.append("")
+            
+            # Replace the selection with the commented version
+            cursor.setPosition(start_pos)
+            cursor.setPosition(self.document().findBlockByNumber(end_block).position() + 
+                              len(self.document().findBlockByNumber(end_block).text()),
+                              QTextCursor.MoveMode.KeepAnchor)
+            cursor.removeSelectedText()
+            cursor.insertText("\n".join(commented_lines))
+        
+        cursor.endEditBlock()
+
+

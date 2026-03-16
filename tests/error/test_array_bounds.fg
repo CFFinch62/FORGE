@@ -1,0 +1,7 @@
+# Error test: array index out of bounds should be a runtime error
+# Expected: runtime error about index out of bounds
+
+proc main() -> void:
+    var nums: []int = [1, 2, 3]
+    print(nums[10])
+

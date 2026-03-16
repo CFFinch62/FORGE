@@ -1,0 +1,3 @@
+Runtime error: Array index 10 out of bounds
+  at tests/error/test_array_bounds.fg:6:15
+  in proc main() at line 4

@@ -1,0 +1,45 @@
+# Regression test: compound assignment was parsed as simple assignment
+# Bug: i += 1 became i = 1, causing infinite loops
+# Fixed in: parser.c parse_assign_stmt (NODE_COMPOUND_ASSIGN)
+
+proc main() -> void:
+    # The exact bug pattern: while loop with compound increment
+    var i: int = 0
+    var sum: int = 0
+    while i < 10:
+        sum += i
+        i += 1
+    print(sum)
+    print(i)
+
+    # Compound subtraction in loop
+    var countdown: int = 20
+    var steps: int = 0
+    while countdown > 0:
+        countdown -= 3
+        steps += 1
+    print(countdown)
+    print(steps)
+
+    # Compound multiply accumulator
+    var product: int = 1
+    for k in range(1, 8):
+        product *= k
+    print(product)
+
+    # Multiple compound ops on same var
+    var x: int = 100
+    x += 10
+    x -= 5
+    x *= 2
+    x /= 3
+    x %= 7
+    print(x)
+
+    # Compound assign doesn't affect other variables
+    var a: int = 5
+    var b: int = 10
+    a += 3
+    print(a)
+    print(b)
+

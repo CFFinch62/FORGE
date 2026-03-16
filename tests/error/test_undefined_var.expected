@@ -1,0 +1,1 @@
+tests/error/test_undefined_var.fg:5:11: error: undefined variable 'undefined_variable'

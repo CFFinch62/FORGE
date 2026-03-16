@@ -1,0 +1,6 @@
+# Error test: calling undefined procedure should be caught
+# Expected: checker error about undefined procedure
+
+proc main() -> void:
+    var result: int = nonexistent_function(1, 2, 3)
+

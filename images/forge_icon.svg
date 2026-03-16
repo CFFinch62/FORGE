@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2a2a2a"/>
+      <stop offset="100%" stop-color="#111111"/>
+    </linearGradient>
+    <linearGradient id="anvilGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5a5a5a"/>
+      <stop offset="100%" stop-color="#2c2c2c"/>
+    </linearGradient>
+    <linearGradient id="glowMetal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF6B1A"/>
+      <stop offset="60%" stop-color="#CC3300"/>
+      <stop offset="100%" stop-color="#881100"/>
+    </linearGradient>
+    <linearGradient id="flame1" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#FF4500"/>
+      <stop offset="50%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#FFD700" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="flame2" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#FF6000"/>
+      <stop offset="50%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#FFEE44" stop-opacity="0.85"/>
+    </linearGradient>
+    <radialGradient id="emberGlow" cx="50%" cy="100%" r="60%">
+      <stop offset="0%" stop-color="#FF4500" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FF4500" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softBlur">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <clipPath id="roundClip">
+      <rect width="512" height="512" rx="64"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#roundClip)">
+    <rect width="512" height="512" fill="url(#bgGrad)"/>
+    <ellipse cx="256" cy="340" rx="160" ry="60" fill="url(#emberGlow)" filter="url(#softBlur)"/>
+
+    <!-- Anvil -->
+    <polygon points="90,245 168,245 168,275 90,275" fill="url(#anvilGrad)" stroke="#666" stroke-width="1.5"/>
+    <rect x="168" y="220" width="254" height="55" rx="6" fill="url(#anvilGrad)" stroke="#555" stroke-width="1.5"/>
+    <rect x="168" y="220" width="254" height="8" rx="3" fill="url(#glowMetal)" opacity="0.85"/>
+    <rect x="195" y="275" width="200" height="35" rx="4" fill="#3a3a3a" stroke="#555" stroke-width="1.5"/>
+    <rect x="175" y="310" width="240" height="22" rx="5" fill="#303030" stroke="#555" stroke-width="1.5"/>
+
+    <!-- Flames -->
+    <path d="M218,222 Q210,190 224,165 Q230,148 218,132 Q242,150 246,174 Q252,198 234,222Z" fill="url(#flame1)" opacity="0.85"/>
+    <path d="M248,222 Q240,182 256,154 Q263,135 250,116 Q276,138 280,164 Q287,192 268,222Z" fill="url(#flame2)" opacity="0.95"/>
+    <path d="M278,222 Q268,172 286,140 Q294,118 280,96 Q308,122 312,152 Q320,182 298,222Z" fill="url(#flame1)" opacity="1"/>
+    <path d="M308,222 Q302,186 318,160 Q325,142 314,126 Q338,146 342,170 Q348,196 328,222Z" fill="url(#flame2)" opacity="0.9"/>
+    <path d="M336,222 Q330,194 344,172 Q350,156 340,142 Q362,160 366,180 Q372,202 352,222Z" fill="url(#flame1)" opacity="0.8"/>
+
+    <!-- Sparks -->
+    <circle cx="228" cy="120" r="4"   fill="#FFD700" opacity="0.9"/>
+    <circle cx="294" cy="84"  r="5"   fill="#FFD700" opacity="0.95"/>
+    <circle cx="338" cy="108" r="3"   fill="#FFA500" opacity="0.85"/>
+    <circle cx="205" cy="148" r="3"   fill="#FF8C00" opacity="0.7"/>
+    <circle cx="372" cy="135" r="3.5" fill="#FFD700" opacity="0.8"/>
+    <circle cx="262" cy="100" r="2.5" fill="#FFEE55" opacity="0.9"/>
+
+    <!-- Wordmark -->
+    <text x="258" y="418" font-family="Arial Black, Arial, sans-serif" font-size="96" font-weight="900"
+          text-anchor="middle" fill="#CC4400" opacity="0.5" dx="3" dy="3">FORGE</text>
+    <text x="258" y="418" font-family="Arial Black, Arial, sans-serif" font-size="96" font-weight="900"
+          text-anchor="middle" fill="#F5ECD7">FORGE</text>
+  </g>
+
+  <!-- Border -->
+  <rect x="0" y="0" width="512" height="512" rx="64" fill="none" stroke="black" stroke-width="18"/>
+</svg>

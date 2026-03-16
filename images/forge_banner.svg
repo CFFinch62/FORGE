@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="200" viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#111111"/>
+      <stop offset="45%" stop-color="#222222"/>
+      <stop offset="100%" stop-color="#1a1008"/>
+    </linearGradient>
+    <linearGradient id="anvilGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5a5a5a"/>
+      <stop offset="100%" stop-color="#2c2c2c"/>
+    </linearGradient>
+    <linearGradient id="glowMetal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF6B1A"/>
+      <stop offset="100%" stop-color="#881100"/>
+    </linearGradient>
+    <linearGradient id="flame1" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#FF4500"/>
+      <stop offset="50%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#FFD700" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="flame2" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#FF6000"/>
+      <stop offset="50%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#FFEE44" stop-opacity="0.85"/>
+    </linearGradient>
+    <radialGradient id="emberGlow" cx="50%" cy="80%" r="70%">
+      <stop offset="0%" stop-color="#FF4500" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#FF4500" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softBlur">
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+    <clipPath id="roundClip">
+      <rect width="800" height="200" rx="18"/>
+    </clipPath>
+    <linearGradient id="divGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF6B1A" stop-opacity="0"/>
+      <stop offset="40%" stop-color="#FF6B1A" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#FF6B1A" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#roundClip)">
+    <rect width="800" height="200" fill="url(#bgGrad)"/>
+
+    <line x1="0" y1="66" x2="800" y2="66" stroke="#ffffff" stroke-width="0.3" opacity="0.04"/>
+    <line x1="0" y1="133" x2="800" y2="133" stroke="#ffffff" stroke-width="0.3" opacity="0.04"/>
+
+    <ellipse cx="112" cy="155" rx="80" ry="32" fill="url(#emberGlow)" filter="url(#softBlur)"/>
+
+    <!-- Anvil -->
+    <polygon points="34,105 68,105 68,118 34,118" fill="url(#anvilGrad)" stroke="#666" stroke-width="0.8"/>
+    <rect x="68" y="95" width="108" height="23" rx="3" fill="url(#anvilGrad)" stroke="#555" stroke-width="0.8"/>
+    <rect x="68" y="95" width="108" height="4" rx="2" fill="url(#glowMetal)" opacity="0.9"/>
+    <rect x="80" y="118" width="84" height="15" rx="2" fill="#3a3a3a" stroke="#555" stroke-width="0.8"/>
+    <rect x="70" y="133" width="104" height="10" rx="3" fill="#303030" stroke="#555" stroke-width="0.8"/>
+
+    <!-- Flames -->
+    <path d="M90,95 Q87,80 93,70 Q96,63 90,56 Q101,63 103,73 Q106,83 98,95Z" fill="url(#flame1)" opacity="0.85"/>
+    <path d="M103,95 Q100,77 107,65 Q110,57 104,49 Q116,58 118,69 Q121,80 112,95Z" fill="url(#flame2)" opacity="0.95"/>
+    <path d="M116,95 Q112,73 120,59 Q124,49 117,41 Q130,51 133,63 Q137,76 126,95Z" fill="url(#flame1)" opacity="1"/>
+    <path d="M129,95 Q126,79 134,66 Q138,57 132,50 Q144,60 146,71 Q149,82 139,95Z" fill="url(#flame2)" opacity="0.9"/>
+    <path d="M141,95 Q139,82 146,71 Q149,63 144,56 Q155,65 157,74 Q160,84 151,95Z" fill="url(#flame1)" opacity="0.8"/>
+
+    <!-- Sparks -->
+    <circle cx="94"  cy="52" r="1.8" fill="#FFD700" opacity="0.9"/>
+    <circle cx="122" cy="36" r="2.2" fill="#FFD700" opacity="0.95"/>
+    <circle cx="145" cy="47" r="1.4" fill="#FFA500" opacity="0.85"/>
+    <circle cx="106" cy="44" r="1.2" fill="#FFEE55" opacity="0.9"/>
+    <circle cx="158" cy="58" r="1.5" fill="#FFD700" opacity="0.8"/>
+
+    <!-- Divider -->
+    <line x1="210" y1="20" x2="210" y2="180" stroke="url(#divGrad)" stroke-width="1"/>
+
+    <!-- Wordmark -->
+    <text x="240" y="98" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="900"
+          fill="#CC4400" opacity="0.45" dx="2" dy="2">FORGE</text>
+    <text x="240" y="98" font-family="Arial Black, Arial, sans-serif" font-size="72" font-weight="900"
+          fill="#F5ECD7">FORGE</text>
+
+    <!-- Tagline -->
+    <text x="240" y="130" font-family="Arial, sans-serif" font-size="17" font-weight="400"
+          fill="#CC7733" letter-spacing="1.5">Shape your code. Shape your thinking.</text>
+
+    <!-- Fragillidae credit -->
+    <text x="782" y="182" font-family="Arial, sans-serif" font-size="11" font-weight="400"
+          text-anchor="end" fill="#555555">Fragillidae Software</text>
+  </g>
+
+  <rect x="0" y="0" width="800" height="200" rx="18" fill="none" stroke="black" stroke-width="10"/>
+</svg>

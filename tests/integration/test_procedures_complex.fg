@@ -1,0 +1,95 @@
+# Integration test: procedures with complex types, recursion, arrays
+
+proc sum_array(arr: []int) -> int:
+    var total: int = 0
+    for i in range(0, len(arr)):
+        total += arr[i]
+    return total
+
+proc reverse_array(arr: []int) -> []int:
+    var result: []int = []
+    var i: int = len(arr) - 1
+    while i >= 0:
+        result = append(result, arr[i])
+        i -= 1
+    return result
+
+proc fibonacci(n: int) -> int:
+    if n <= 0:
+        return 0
+    if n == 1:
+        return 1
+    return fibonacci(n - 1) + fibonacci(n - 2)
+
+proc gcd(a: int, b: int) -> int:
+    while b != 0:
+        var temp: int = b
+        b = a % b
+        a = temp
+    return a
+
+proc is_prime(n: int) -> bool:
+    if n < 2:
+        return false
+    if n < 4:
+        return true
+    if n % 2 == 0:
+        return false
+    var i: int = 3
+    while i * i <= n:
+        if n % i == 0:
+            return false
+        i += 2
+    return true
+
+proc count_primes(limit: int) -> int:
+    var count: int = 0
+    for i in range(2, limit):
+        if is_prime(i):
+            count += 1
+    return count
+
+proc build_range(start: int, end: int) -> []int:
+    var result: []int = []
+    for i in range(start, end):
+        result = append(result, i)
+    return result
+
+proc main() -> void:
+    # Array parameter
+    var nums: []int = [10, 20, 30, 40, 50]
+    print(sum_array(nums))
+
+    # Array return
+    var rev: []int = reverse_array(nums)
+    print(rev[0])
+    print(rev[4])
+
+    # Recursion
+    print(fibonacci(10))
+
+    # Mutual procedure calls
+    print(gcd(48, 18))
+    print(gcd(100, 75))
+
+    # Procedure returning bool in loop
+    var prime_sum: int = 0
+    for i in range(2, 20):
+        if is_prime(i):
+            prime_sum += i
+    print(prime_sum)
+
+    # Procedure returning array used in loop
+    var r: []int = build_range(5, 10)
+    var r_sum: int = 0
+    for i in range(0, len(r)):
+        r_sum += r[i]
+    print(r_sum)
+
+    # Nested procedure calls
+    print(count_primes(100))
+
+    # Procedure with early return in loop
+    print(is_prime(97))
+    print(is_prime(100))
+
