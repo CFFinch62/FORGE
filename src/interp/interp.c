@@ -9,6 +9,7 @@
 #include "interp/interp.h"
 #include "lexer/lexer.h"
 #include "../runtime/forge_runtime.h"  /* For serial functions */
+#include "../runtime/forge_gui.h"       /* For GUI functions */
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -39,6 +40,8 @@ static int try_stdlib_serial(forge_interp_t* interp, const char* proc_name,
                              forge_value_t* args, int arg_count, forge_value_t* result);
 static int try_stdlib_nmea(forge_interp_t* interp, const char* proc_name,
                            forge_value_t* args, int arg_count, forge_value_t* result);
+static int try_stdlib_gui(forge_interp_t* interp, const char* proc_name,
+                          forge_value_t* args, int arg_count, forge_value_t* result);
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * Error Handling
@@ -860,6 +863,8 @@ forge_value_t interp_eval_expr(forge_interp_t* interp, forge_env_t* env,
                         handled = try_stdlib_serial(interp, proc_name, args, arg_count, &stdlib_result);
                     } else if (strcmp(mod_name, "forge.nmea") == 0) {
                         handled = try_stdlib_nmea(interp, proc_name, args, arg_count, &stdlib_result);
+                    } else if (strcmp(mod_name, "forge.gui") == 0) {
+                        handled = try_stdlib_gui(interp, proc_name, args, arg_count, &stdlib_result);
                     }
                     if (handled) {
                         result = stdlib_result;
@@ -924,6 +929,8 @@ forge_value_t interp_eval_expr(forge_interp_t* interp, forge_env_t* env,
                                 handled = try_stdlib_serial(interp, func_name, args, arg_count, &stdlib_result);
                             } else if (strcmp(sub_name, "nmea") == 0) {
                                 handled = try_stdlib_nmea(interp, func_name, args, arg_count, &stdlib_result);
+                            } else if (strcmp(sub_name, "gui") == 0) {
+                                handled = try_stdlib_gui(interp, func_name, args, arg_count, &stdlib_result);
                             }
                             if (handled) {
                                 result = stdlib_result;
@@ -949,7 +956,55 @@ forge_value_t interp_eval_expr(forge_interp_t* interp, forge_env_t* env,
                         forge_free(args);
                         return val_none();
                     }
-                } else {
+                } 
+                else if (inner->kind == NODE_IDENT) {
+                    const char* sub_name = inner->data.name;
+                    char module_name[64];
+                    snprintf(module_name, sizeof(module_name), "forge.%s", sub_name);
+
+                    forge_module_t* module = interp_get_module(interp, module_name);
+                    if (module && module->is_stdlib) {
+                        forge_value_t stdlib_result;
+                        int handled = 0;
+                        if (strcmp(sub_name, "io") == 0) {
+                            handled = try_stdlib_io(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "str") == 0) {
+                            handled = try_stdlib_str(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "math") == 0) {
+                            handled = try_stdlib_math(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "sys") == 0) {
+                            handled = try_stdlib_sys(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "time") == 0) {
+                            handled = try_stdlib_time(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "buf") == 0) {
+                            handled = try_stdlib_buf(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "serial") == 0) {
+                            handled = try_stdlib_serial(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "nmea") == 0) {
+                            handled = try_stdlib_nmea(interp, func_name, args, arg_count, &stdlib_result);
+                        } else if (strcmp(sub_name, "gui") == 0) {
+                            handled = try_stdlib_gui(interp, func_name, args, arg_count, &stdlib_result);
+                        }
+                        
+                        if (handled) {
+                            result = stdlib_result;
+                        } else {
+                            interp_error(interp, expr->line, expr->column,
+                                         "Undefined procedure '%s' in stdlib module '%s'",
+                                         func_name, module_name);
+                            for (int i = 0; i < arg_count; i++) val_free(&args[i]);
+                            forge_free(args);
+                            return val_none();
+                        }
+                    } else {
+                        interp_error(interp, expr->line, expr->column,
+                                     "Cannot call field access as function");
+                        for (int i = 0; i < arg_count; i++) val_free(&args[i]);
+                        forge_free(args);
+                        return val_none();
+                    }
+                }
+                else {
                     interp_error(interp, expr->line, expr->column,
                                  "Cannot call field access as function");
                     for (int i = 0; i < arg_count; i++) val_free(&args[i]);
@@ -3523,6 +3578,318 @@ static int try_stdlib_nmea(forge_interp_t* interp, const char* proc_name,
             return 1;
         }
         *result = val_float(0.0);
+        return 1;
+    }
+
+    return 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Standard Library: forge.gui (raylib + raygui)
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+static int try_stdlib_gui(forge_interp_t* interp, const char* proc_name,
+                          forge_value_t* args, int arg_count, forge_value_t* result) {
+    (void)interp;
+
+    /* === Window Management === */
+    if (strcmp(proc_name, "init_window") == 0) {
+        if (arg_count >= 3 && args[2].kind == VAL_STR) {
+            forge_str_t title = interp_str_to_runtime(&args[2]);
+            forge_gui_init_window(args[0].as.i, args[1].as.i, title);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "close_window") == 0) {
+        forge_gui_close_window();
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "window_open") == 0) {
+        *result = val_bool(forge_gui_window_open());
+        return 1;
+    }
+    if (strcmp(proc_name, "set_target_fps") == 0) {
+        if (arg_count >= 1) forge_gui_set_target_fps(args[0].as.i);
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "get_fps") == 0) {
+        *result = val_int(forge_gui_get_fps());
+        return 1;
+    }
+    if (strcmp(proc_name, "get_dt") == 0) {
+        *result = val_float(forge_gui_get_dt());
+        return 1;
+    }
+
+    /* === Drawing Control === */
+    if (strcmp(proc_name, "begin_draw") == 0) {
+        forge_gui_begin_draw();
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "end_draw") == 0) {
+        forge_gui_end_draw();
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "clear") == 0) {
+        if (arg_count >= 4) {
+            forge_gui_clear(args[0].as.i, args[1].as.i, args[2].as.i, args[3].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+
+    /* === Shape Drawing === */
+    if (strcmp(proc_name, "draw_line") == 0) {
+        if (arg_count >= 8) {
+            forge_gui_draw_line(args[0].as.i, args[1].as.i, args[2].as.i, args[3].as.i,
+                                args[4].as.i, args[5].as.i, args[6].as.i, args[7].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "draw_rect") == 0) {
+        if (arg_count >= 8) {
+            forge_gui_draw_rect(args[0].as.i, args[1].as.i, args[2].as.i, args[3].as.i,
+                                args[4].as.i, args[5].as.i, args[6].as.i, args[7].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "draw_rect_lines") == 0) {
+        if (arg_count >= 8) {
+            forge_gui_draw_rect_lines(args[0].as.i, args[1].as.i, args[2].as.i, args[3].as.i,
+                                      args[4].as.i, args[5].as.i, args[6].as.i, args[7].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "draw_circle") == 0) {
+        if (arg_count >= 7) {
+            forge_gui_draw_circle(args[0].as.i, args[1].as.i, args[2].as.f,
+                                  args[3].as.i, args[4].as.i, args[5].as.i, args[6].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "draw_circle_lines") == 0) {
+        if (arg_count >= 7) {
+            forge_gui_draw_circle_lines(args[0].as.i, args[1].as.i, args[2].as.f,
+                                        args[3].as.i, args[4].as.i, args[5].as.i, args[6].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+
+    /* === Text === */
+    if (strcmp(proc_name, "draw_text") == 0) {
+        if (arg_count >= 8 && args[0].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[0]);
+            forge_gui_draw_text(text, args[1].as.i, args[2].as.i, args[3].as.i,
+                                args[4].as.i, args[5].as.i, args[6].as.i, args[7].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "measure_text") == 0) {
+        if (arg_count >= 2 && args[0].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[0]);
+            *result = val_int(forge_gui_measure_text(text, args[1].as.i));
+        } else {
+            *result = val_int(0);
+        }
+        return 1;
+    }
+
+    /* === Input — Keyboard === */
+    if (strcmp(proc_name, "is_key_pressed") == 0) {
+        if (arg_count >= 1) {
+            *result = val_bool(forge_gui_is_key_pressed(args[0].as.i));
+        } else {
+            *result = val_bool(0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "is_key_down") == 0) {
+        if (arg_count >= 1) {
+            *result = val_bool(forge_gui_is_key_down(args[0].as.i));
+        } else {
+            *result = val_bool(0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "is_key_released") == 0) {
+        if (arg_count >= 1) {
+            *result = val_bool(forge_gui_is_key_released(args[0].as.i));
+        } else {
+            *result = val_bool(0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "get_key_pressed") == 0) {
+        *result = val_int(forge_gui_get_key_pressed());
+        return 1;
+    }
+
+    /* === Input — Mouse === */
+    if (strcmp(proc_name, "mouse_x") == 0) {
+        *result = val_int(forge_gui_mouse_x());
+        return 1;
+    }
+    if (strcmp(proc_name, "mouse_y") == 0) {
+        *result = val_int(forge_gui_mouse_y());
+        return 1;
+    }
+    if (strcmp(proc_name, "is_mouse_pressed") == 0) {
+        if (arg_count >= 1) {
+            *result = val_bool(forge_gui_is_mouse_pressed(args[0].as.i));
+        } else {
+            *result = val_bool(0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "is_mouse_down") == 0) {
+        if (arg_count >= 1) {
+            *result = val_bool(forge_gui_is_mouse_down(args[0].as.i));
+        } else {
+            *result = val_bool(0);
+        }
+        return 1;
+    }
+
+    /* === Widgets (raygui) === */
+    if (strcmp(proc_name, "button") == 0) {
+        if (arg_count >= 5 && args[4].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[4]);
+            *result = val_bool(forge_gui_button(args[0].as.i, args[1].as.i,
+                                                 args[2].as.i, args[3].as.i, text));
+        } else {
+            *result = val_bool(0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "label") == 0) {
+        if (arg_count >= 5 && args[4].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[4]);
+            forge_gui_label(args[0].as.i, args[1].as.i,
+                            args[2].as.i, args[3].as.i, text);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "checkbox") == 0) {
+        if (arg_count >= 6 && args[4].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[4]);
+            int checked = args[5].as.b ? 1 : 0;
+            *result = val_int(forge_gui_checkbox(args[0].as.i, args[1].as.i,
+                                                  args[2].as.i, args[3].as.i,
+                                                  text, checked));
+        } else {
+            *result = val_int(0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "slider") == 0) {
+        if (arg_count >= 7) {
+            *result = val_float(forge_gui_slider(args[0].as.i, args[1].as.i,
+                                                  args[2].as.i, args[3].as.i,
+                                                  args[4].as.f, args[5].as.f,
+                                                  args[6].as.f));
+        } else {
+            *result = val_float(0.0);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "textbox") == 0) {
+        if (arg_count >= 6 && args[4].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[4]);
+            forge_str_t out = forge_gui_textbox(args[0].as.i, args[1].as.i,
+                                                 args[2].as.i, args[3].as.i,
+                                                 text, args[5].as.i);
+            *result = runtime_str_to_interp(out);
+        } else {
+            *result = val_str_lit("");
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "set_style_dark") == 0) {
+        forge_gui_set_style_dark();
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "set_style_light") == 0) {
+        forge_gui_set_style_light();
+        *result = val_void();
+        return 1;
+    }
+
+    /* === Scrollable Text Log === */
+    if (strcmp(proc_name, "log_create") == 0) {
+        if (arg_count >= 7) {
+            forge_gui_log_create(args[0].as.i, args[1].as.i, args[2].as.i,
+                                 args[3].as.i, args[4].as.i,
+                                 args[5].as.i, args[6].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "log_add") == 0) {
+        if (arg_count >= 6 && args[1].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[1]);
+            forge_gui_log_add(args[0].as.i, text,
+                              args[2].as.i, args[3].as.i, args[4].as.i, args[5].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "log_clear") == 0) {
+        if (arg_count >= 1) forge_gui_log_clear(args[0].as.i);
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "log_draw") == 0) {
+        if (arg_count >= 1) forge_gui_log_draw(args[0].as.i);
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "log_count") == 0) {
+        if (arg_count >= 1) {
+            *result = val_int(forge_gui_log_count(args[0].as.i));
+        } else {
+            *result = val_int(0);
+        }
+        return 1;
+    }
+
+    /* === Dropdown === */
+    if (strcmp(proc_name, "dropdown") == 0) {
+        if (arg_count >= 6 && args[4].kind == VAL_STR) {
+            forge_str_t items = interp_str_to_runtime(&args[4]);
+            *result = val_int(forge_gui_dropdown(args[0].as.i, args[1].as.i,
+                                                  args[2].as.i, args[3].as.i,
+                                                  items, args[5].as.i));
+        } else {
+            *result = val_int(0);
+        }
+        return 1;
+    }
+
+    /* === Color Button === */
+    if (strcmp(proc_name, "color_button") == 0) {
+        if (arg_count >= 13 && args[4].kind == VAL_STR) {
+            forge_str_t text = interp_str_to_runtime(&args[4]);
+            *result = val_bool(forge_gui_color_button(
+                args[0].as.i, args[1].as.i, args[2].as.i, args[3].as.i,
+                text,
+                args[5].as.i, args[6].as.i, args[7].as.i, args[8].as.i,
+                args[9].as.i, args[10].as.i, args[11].as.i, args[12].as.i));
+        } else {
+            *result = val_bool(0);
+        }
         return 1;
     }
 

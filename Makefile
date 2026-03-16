@@ -4,6 +4,15 @@
 CC      = gcc
 CFLAGS  = -std=c99 -Wall -Wextra -Wpedantic -g -I src
 RELEASE_FLAGS = -std=c99 -O2 -DNDEBUG -I src
+LDFLAGS = -lm
+
+# Optional GUI support (raylib + raygui) — vendored in vendor/raylib/
+# Build with: make GUI=1
+ifeq ($(GUI),1)
+  CFLAGS  += -DFORGE_HAS_GUI -I vendor/raylib/include
+  RELEASE_FLAGS += -DFORGE_HAS_GUI -I vendor/raylib/include
+  LDFLAGS += -L vendor/raylib/lib -lraylib -lGL -lpthread -ldl -lrt -lX11
+endif
 
 # Source files - all subdirectories
 SRC_UTIL      = $(wildcard src/util/*.c)
@@ -26,13 +35,13 @@ TARGET = forge
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ -lm
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 release:
-	$(CC) $(RELEASE_FLAGS) -o $(TARGET) $(SRC)
+	$(CC) $(RELEASE_FLAGS) -o $(TARGET) $(SRC) $(LDFLAGS)
 
 test:
 	@echo "Running tests..."

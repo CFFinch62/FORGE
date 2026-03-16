@@ -378,6 +378,7 @@ import forge.time     # now, sleep, elapsed_ms, timestamp
 import forge.buf      # byte buffer read/write utilities
 import forge.serial   # serial port I/O (open, read_byte, write_str, close)
 import forge.nmea     # NMEA 0183 parsing (parse_gga, parse_rmc, valid_checksum)
+import forge.gui      # GUI windows, drawing, input, widgets (requires GUI=1 build)
 ```
 
 ### forge.io
@@ -450,6 +451,39 @@ if gga is some:
     var lat: float = decimal_degrees(gga.value.latitude, gga.value.lat_dir)
 var rmc: ?RMC = parse_rmc(sentence)
 ```
+
+### forge.gui  *(requires `make GUI=1` build)*
+
+```
+# Window
+gui.init_window(800, 600, "My App")
+gui.set_target_fps(60)
+gui.set_style_dark()
+while gui.window_open():
+    gui.begin_draw()
+    gui.clear(30, 30, 35, 255)
+    # ... draw here ...
+    gui.end_draw()
+gui.close_window()
+
+# Drawing
+gui.draw_rect(x, y, w, h, r, g, b, a)
+gui.draw_circle(cx, cy, radius, r, g, b, a)
+gui.draw_line(x1, y1, x2, y2, r, g, b, a)
+gui.draw_text("hello", x, y, size, r, g, b, a)
+
+# Widgets
+var clicked: bool = gui.button(x, y, w, h, "OK")
+var text: str = gui.textbox(x, y, w, h, text, 256)
+var sel: int = gui.dropdown(x, y, w, h, "A;B;C", sel)
+
+# Scrollable log
+gui.log_create(0, x, y, w, h, 4096, 16)
+gui.log_add(0, "message", r, g, b, a)
+gui.log_draw(0)
+```
+
+> See [FORGE GUI Library Guide](FORGE_GUI_Library_Guide.md) for complete documentation.
 
 ---
 

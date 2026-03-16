@@ -2,6 +2,7 @@
  * FORGE Runtime Library Implementation
  */
 
+#define _DEFAULT_SOURCE          /* For usleep() */
 #define _POSIX_C_SOURCE 200809L  /* For getline, ssize_t */
 
 #include "forge_runtime.h"

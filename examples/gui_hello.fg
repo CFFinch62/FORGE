@@ -1,0 +1,35 @@
+# gui_hello.fg — Minimal FORGE GUI example
+#
+# Build:  make GUI=1
+# Run:    ./forge run examples/gui_hello.fg
+
+import forge.gui
+
+proc main() -> void:
+    gui.init_window(640, 400, "Hello FORGE GUI")
+    gui.set_target_fps(60)
+    gui.set_style_dark()
+
+    while gui.window_open():
+        gui.begin_draw()
+        gui.clear(35, 35, 45, 255)
+
+        # Draw a colorful header
+        gui.draw_rect(0, 0, 640, 60, 30, 90, 180, 255)
+        gui.draw_text("Hello from FORGE!", 180, 16, 28, 255, 255, 255, 255)
+
+        # Draw some shapes
+        gui.draw_circle(320, 220, 80.0, 60, 140, 220, 180)
+        gui.draw_circle_lines(320, 220, 80.0, 100, 180, 255, 255)
+
+        # Show mouse position
+        var info: str = "Mouse: " + str(gui.mouse_x()) + ", " + str(gui.mouse_y())
+        gui.draw_text(info, 20, 370, 16, 160, 160, 160, 255)
+
+        # Interactive button
+        if gui.button(250, 330, 140, 36, "Say Hello"):
+            print("Hello from the GUI button!")
+
+        gui.end_draw()
+
+    gui.close_window()

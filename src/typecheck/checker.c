@@ -1059,6 +1059,14 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                     is_stdlib_call = 1;
                     stdlib_module = mod_name + 6;  /* Skip "forge." */
                     stdlib_func = callee->data.qualified.symbol_name;
+                } else if (strcmp(mod_name, "gui") == 0 || strcmp(mod_name, "serial") == 0 ||
+                           strcmp(mod_name, "nmea") == 0 || strcmp(mod_name, "io") == 0 ||
+                           strcmp(mod_name, "str") == 0 || strcmp(mod_name, "math") == 0 ||
+                           strcmp(mod_name, "sys") == 0 || strcmp(mod_name, "time") == 0 ||
+                           strcmp(mod_name, "buf") == 0) {
+                    is_stdlib_call = 1;
+                    stdlib_module = mod_name;
+                    stdlib_func = callee->data.qualified.symbol_name;
                 }
             }
             else if (callee && callee->kind == NODE_FIELD_ACCESS) {
@@ -1070,6 +1078,19 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                         strcmp(root->data.name, "forge") == 0) {
                         is_stdlib_call = 1;
                         stdlib_module = inner->data.field_access.field_name;
+                        stdlib_func = callee->data.field_access.field_name;
+                    }
+                }
+                /* Check for mod.func() pattern (single field access) */
+                else if (inner && inner->kind == NODE_IDENT) {
+                    const char* mod_name = inner->data.name;
+                    if (strcmp(mod_name, "gui") == 0 || strcmp(mod_name, "serial") == 0 ||
+                        strcmp(mod_name, "nmea") == 0 || strcmp(mod_name, "io") == 0 ||
+                        strcmp(mod_name, "str") == 0 || strcmp(mod_name, "math") == 0 ||
+                        strcmp(mod_name, "sys") == 0 || strcmp(mod_name, "time") == 0 ||
+                        strcmp(mod_name, "buf") == 0) {
+                        is_stdlib_call = 1;
+                        stdlib_module = mod_name;
                         stdlib_func = callee->data.field_access.field_name;
                     }
                 }
@@ -1225,6 +1246,40 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                             /* Returns float (decimal degrees) */
                             result = type_prim(checker->arena, TY_FLOAT);
                         } else {
+                            result = type_prim(checker->arena, TY_VOID);
+                        }
+                    } else if (strcmp(stdlib_module, "gui") == 0) {
+                        /* forge.gui functions */
+                        if (strcmp(stdlib_func, "window_open") == 0 ||
+                            strcmp(stdlib_func, "is_key_pressed") == 0 ||
+                            strcmp(stdlib_func, "is_key_down") == 0 ||
+                            strcmp(stdlib_func, "is_key_released") == 0 ||
+                            strcmp(stdlib_func, "is_mouse_pressed") == 0 ||
+                            strcmp(stdlib_func, "is_mouse_down") == 0 ||
+                            strcmp(stdlib_func, "button") == 0 ||
+                            strcmp(stdlib_func, "color_button") == 0) {
+                            result = type_prim(checker->arena, TY_BOOL);
+                        } else if (strcmp(stdlib_func, "get_fps") == 0 ||
+                                   strcmp(stdlib_func, "mouse_x") == 0 ||
+                                   strcmp(stdlib_func, "mouse_y") == 0 ||
+                                   strcmp(stdlib_func, "get_key_pressed") == 0 ||
+                                   strcmp(stdlib_func, "measure_text") == 0 ||
+                                   strcmp(stdlib_func, "checkbox") == 0 ||
+                                   strcmp(stdlib_func, "dropdown") == 0 ||
+                                   strcmp(stdlib_func, "log_count") == 0) {
+                            result = type_prim(checker->arena, TY_INT);
+                        } else if (strcmp(stdlib_func, "get_dt") == 0 ||
+                                   strcmp(stdlib_func, "slider") == 0) {
+                            result = type_prim(checker->arena, TY_FLOAT);
+                        } else if (strcmp(stdlib_func, "textbox") == 0) {
+                            result = type_prim(checker->arena, TY_STR);
+                        } else {
+                            /* init_window, close_window, set_target_fps,
+                               begin_draw, end_draw, clear,
+                               draw_line, draw_rect, draw_rect_lines,
+                               draw_circle, draw_circle_lines, draw_text,
+                               label, set_style_dark, set_style_light,
+                               log_create, log_add, log_clear, log_draw -> void */
                             result = type_prim(checker->arena, TY_VOID);
                         }
                     } else {
