@@ -4,7 +4,7 @@
 
 **Fast, Reliable, Organized, General-purpose, Event-driven**
 
-FORGE is a statically-typed, compiled systems programming language built around clarity and control. It features a clean Python-inspired syntax with explicit types, a tree-walking interpreter for rapid development, and a native code compiler via C or LLVM backends. FORGE is designed to be simple to learn while powerful enough for real-world systems work.
+FORGE is a statically-typed, compiled systems programming language built around clarity and control. It features a clean Python-inspired syntax with explicit types, a tree-walking interpreter for rapid development, and a native code compiler via C or LLVM backends. FORGE is designed to be simple to learn while powerful enough for real-world systems work. FORGE is the third of 3 teaching languages developed to help people learn how to program through critical thinking. The other two are STEPS (verbose English like entry language), and PLAIN (general purpose scrpting language like a mix of Python and Go). Each language brings something unique to the table, and together they form a complete learning path.
 
 > *Shape your code. Shape your thinking.*
 
@@ -72,29 +72,29 @@ Compile it to a native binary:
 
 ## 🛠️ CLI Reference
 
-| Command | Description |
-|---------|-------------|
-| `forge run <file.fg>` | Interpret and execute |
-| `forge build <file.fg>` | Compile to native binary |
-| `forge check <file.fg>` | Type-check only (no execution) |
-| `forge fmt <file.fg>` | Format source in place |
-| `forge emit <file.fg>` | Output generated C code |
-| `forge emit-llvm <file.fg>` | Output LLVM IR |
-| `forge doc <file.fg>` | Generate documentation |
-| `forge repl` | Interactive REPL |
-| `forge --version` | Show version |
-| `forge --help` | Show help |
+| Command                     | Description                    |
+| --------------------------- | ------------------------------ |
+| `forge run <file.fg>`       | Interpret and execute          |
+| `forge build <file.fg>`     | Compile to native binary       |
+| `forge check <file.fg>`     | Type-check only (no execution) |
+| `forge fmt <file.fg>`       | Format source in place         |
+| `forge emit <file.fg>`      | Output generated C code        |
+| `forge emit-llvm <file.fg>` | Output LLVM IR                 |
+| `forge doc <file.fg>`       | Generate documentation         |
+| `forge repl`                | Interactive REPL               |
+| `forge --version`           | Show version                   |
+| `forge --help`              | Show help                      |
 
 ### Key `forge build` flags
 
-| Flag | Description |
-|------|-------------|
-| `-o <file>` | Output file path |
+| Flag                 | Description                        |
+| -------------------- | ---------------------------------- |
+| `-o <file>`          | Output file path                   |
 | `--target <c\|llvm>` | Compilation backend (default: `c`) |
-| `-O <0-3>` | Optimization level |
-| `-g, --debug` | Include debug symbols |
-| `--bounds-check` | Enable array bounds checking |
-| `--strict` | Treat warnings as errors |
+| `-O <0-3>`           | Optimization level                 |
+| `-g, --debug`        | Include debug symbols              |
+| `--bounds-check`     | Enable array bounds checking       |
+| `--strict`           | Treat warnings as errors           |
 
 ---
 
@@ -212,14 +212,14 @@ FORGE/
 
 Full documentation is available in the [`user_docs/`](user_docs/) folder:
 
-| Document | Description |
-|----------|-------------|
-| [FORGE Usage Guide](user_docs/FORGE_Usage_Guide.md) | Complete language and CLI reference |
-| [GUI Library Guide](user_docs/FORGE_GUI_Library_Guide.md) | Building GUI apps with raylib |
-| [Memory Management Guide](user_docs/FORGE_Memory_Management_Guide.md) | Ownership and manual memory control |
-| [Optional Types Guide](user_docs/FORGE_Optional_Types_Guide.md) | Working with `?Type`, `some`, and `none` |
-| [Quick Reference](user_docs/quick_reference.md) | Syntax cheat sheet |
-| [Deployment Guide](user_docs/FORGE_Deployment_Guide.md) | Packaging and distributing the toolchain |
+| Document                                                              | Description                              |
+| --------------------------------------------------------------------- | ---------------------------------------- |
+| [FORGE Usage Guide](user_docs/FORGE_Usage_Guide.md)                   | Complete language and CLI reference      |
+| [GUI Library Guide](user_docs/FORGE_GUI_Library_Guide.md)             | Building GUI apps with raylib            |
+| [Memory Management Guide](user_docs/FORGE_Memory_Management_Guide.md) | Ownership and manual memory control      |
+| [Optional Types Guide](user_docs/FORGE_Optional_Types_Guide.md)       | Working with `?Type`, `some`, and `none` |
+| [Quick Reference](user_docs/quick_reference.md)                       | Syntax cheat sheet                       |
+| [Deployment Guide](user_docs/FORGE_Deployment_Guide.md)               | Packaging and distributing the toolchain |
 
 ---
 
