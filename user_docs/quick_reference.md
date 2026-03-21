@@ -119,6 +119,16 @@ const NAME: Type = expression  # compile-time constant (SCREAMING_SNAKE_CASE)
 
 **Compound assignments:** `+=` `-=` `*=` `/=` `%=` `&=` `|=` `^=` `<<=` `>>=`
 
+**Variable swapping:** `swap(a, b)` — swaps two variables of the same type in place (global built-in, no import required)
+
+```
+var x: int = 1
+var y: int = 2
+swap(x, y)      # x == 2, y == 1
+```
+
+Works with any type: `int`, `float`, `str`, etc.
+
 ---
 
 ## Operators
@@ -419,6 +429,17 @@ replace(s, old, new)
 var n: ?int = to_int("42")       # returns ?int
 var f: ?float = to_float("3.14") # returns ?float
 substring(s, start, end)
+```
+
+### Global Built-ins *(no import needed)*
+
+```
+print(val)          # print any value to stdout
+len(arr)            # length of array, string, or map
+str(val)            # convert any primitive to string
+type(val)           # runtime type name as string: "int", "str", etc.
+append(arr, val)    # append element to dynamic array
+swap(a, b)          # swap two variables in place (any type)
 ```
 
 ### forge.math

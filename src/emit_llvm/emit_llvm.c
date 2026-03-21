@@ -792,6 +792,32 @@ int llvm_emit_expr(forge_llvm_emitter_t* e, forge_node_t* node) {
             }
             int arg_count = node->data.call.arg_count;
 
+            /* Handle swap(a, b) builtin — load both ptrs, store crossed */
+            if (strcmp(func_name, "swap") == 0 && arg_count == 2) {
+                forge_node_t* arg_a = node->data.call.args[0];
+                forge_node_t* arg_b = node->data.call.args[1];
+                forge_type_t* t = arg_a->resolved_type;
+                const char* tstr = llvm_type_str(e, t);
+
+                const char* ptr_a = (arg_a->kind == NODE_IDENT)
+                    ? llvm_lookup_var(e, arg_a->data.name) : NULL;
+                const char* ptr_b = (arg_b->kind == NODE_IDENT)
+                    ? llvm_lookup_var(e, arg_b->data.name) : NULL;
+
+                if (!ptr_a || !ptr_b) {
+                    /* fallback: no-op if we can't resolve the pointers */
+                    return -1;
+                }
+
+                int val_a = llvm_next_reg(e);
+                int val_b = llvm_next_reg(e);
+                LLVM_EMITLN(e, "  %%%d = load %s, %s* %%%s", val_a, tstr, tstr, ptr_a);
+                LLVM_EMITLN(e, "  %%%d = load %s, %s* %%%s", val_b, tstr, tstr, ptr_b);
+                LLVM_EMITLN(e, "  store %s %%%d, %s* %%%s", tstr, val_b, tstr, ptr_a);
+                LLVM_EMITLN(e, "  store %s %%%d, %s* %%%s", tstr, val_a, tstr, ptr_b);
+                return -1;
+            }
+
             /* Handle builtin print specially */
             if (strcmp(func_name, "print") == 0 && arg_count >= 1) {
                 int arg_reg = llvm_emit_expr(e, node->data.call.args[0]);

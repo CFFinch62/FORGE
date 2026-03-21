@@ -551,6 +551,32 @@ x <<= 2             # Left shift assign
 x >>= 1             # Right shift assign
 ```
 
+### 5.4 Variable Swapping
+
+FORGE provides a built-in `swap(a, b)` function that swaps two variables in place. It works with any type and requires no import.
+
+```forge
+var a: int = 10
+var b: int = 99
+swap(a, b)
+print(a)    # 99
+print(b)    # 10
+```
+
+`swap` works with any type — `int`, `float`, `str`, and more:
+
+```forge
+var x: float = 3.14
+var y: float = 2.71
+swap(x, y)    # x == 2.71, y == 3.14
+
+var s1: str = "hello"
+var s2: str = "world"
+swap(s1, s2)  # s1 == "world", s2 == "hello"
+```
+
+Both arguments must be simple variable names (not expressions or array elements). This is the FORGE equivalent of Python's `a, b = b, a`.
+
 ---
 
 ## 6. Expressions and Operators
@@ -755,18 +781,18 @@ proc main() -> void:
 By default, parameters are passed by value. Use `ref` for reference passing:
 
 ```forge
-proc swap(a: ref int, b: ref int) -> void:
-    var tmp: int = a
-    a = b
-    b = tmp
+proc increment(n: ref int) -> void:
+    n += 1
 
 proc main() -> void:
-    var x: int = 10
-    var y: int = 20
-    swap(ref x, ref y)
-    print(x)  # Output: 20
-    print(y)  # Output: 10
+    var count: int = 0
+    increment(ref count)
+    print(count)  # Output: 1
 ```
+
+The caller must use the `ref` keyword explicitly at the call site — this makes mutation of the caller's variable visible in the source.
+
+> **Note:** For the common case of swapping two variables, use the built-in `swap(a, b)` rather than writing a custom swap procedure. See [Section 5.4](#54-variable-swapping).
 
 ---
 
@@ -1059,6 +1085,30 @@ on sensors.reading_available as value:
 ---
 
 ## 14. Standard Library
+
+### 14.0 Global Built-in Functions
+
+These functions are available everywhere without any import:
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `print` | `print(val: any) -> void` | Print any value to stdout with a newline |
+| `len` | `len(col: any) -> int` | Length of an array, string, or map |
+| `str` | `str(val: any) -> str` | Convert any primitive value to its string representation |
+| `type` | `type(val: any) -> str` | Return the runtime type name as a string (`"int"`, `"str"`, etc.) |
+| `append` | `append(arr: any, val: any) -> void` | Append an element to a dynamic array |
+| `swap` | `swap(a: any, b: any) -> void` | Swap two variables in place |
+
+```forge
+# swap — swaps two variables in place, any type
+var a: int = 1
+var b: int = 2
+swap(a, b)
+print(a)    # 2
+print(b)    # 1
+```
+
+`swap` accepts any two variables of the same type. Both arguments must be simple variable names. This is the FORGE equivalent of Python's `a, b = b, a`.
 
 ### 14.1 `forge.io` — Input/Output
 

@@ -1,0 +1,29 @@
+# Test swap() builtin — swaps two variables in place
+
+proc main() -> void:
+    # int swap
+    var a: int = 10
+    var b: int = 99
+    print("Before: a=" + str(a) + "  b=" + str(b))
+    swap(a, b)
+    print("After:  a=" + str(a) + "  b=" + str(b))
+
+    # float swap
+    var x: float = 3.14
+    var y: float = 2.71
+    print("Before: x=" + str(x) + "  y=" + str(y))
+    swap(x, y)
+    print("After:  x=" + str(x) + "  y=" + str(y))
+
+    # string swap
+    var s1: str = "hello"
+    var s2: str = "world"
+    print("Before: s1=" + s1 + "  s2=" + s2)
+    swap(s1, s2)
+    print("After:  s1=" + s1 + "  s2=" + s2)
+
+    # swap already-equal values (edge case)
+    var p: int = 7
+    var q: int = 7
+    swap(p, q)
+    print("Equal swap: p=" + str(p) + "  q=" + str(q))

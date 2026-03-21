@@ -740,22 +740,21 @@ proc double(x: int) -> int:
 **Reference parameters** use the `ref` qualifier. A `ref` parameter is an alias for the caller's variable. Modifying it modifies the caller's value.
 
 ```
-proc swap(a: ref int, b: ref int) -> void:
-    var tmp: int = a
-    a = b
-    b = tmp
+proc increment(n: ref int) -> void:
+    n += 1
 ```
 
 **Calling with ref:**
 
 ```
-var x: int = 10
-var y: int = 20
-swap(ref x, ref y)      # caller must use 'ref' keyword explicitly
-# x == 20, y == 10
+var count: int = 0
+increment(ref count)    # caller must use 'ref' keyword explicitly
+# count == 1
 ```
 
 Record parameters are passed by value (the whole record is copied). For large records, use `ref` to avoid the copy cost.
+
+> **Note on swapping:** For the common case of swapping two variables, use the built-in `swap(a, b)` rather than a user-defined `ref`-based swap. See §14.0.
 
 ### 7.3 Return Types
 
@@ -1440,6 +1439,63 @@ assert divisor != 0
 ## 14. Standard Library
 
 All standard library modules are in the `forge.*` namespace. They are implemented in FORGE itself (targeting a bootstrap C runtime) and can be used in both interpreted and compiled modes.
+
+### 14.0 Global Built-in Functions
+
+The following functions are always in scope — no import required. They are handled as special forms by the interpreter, C emitter, and LLVM emitter.
+
+```
+print(val: any) -> void
+    # Converts val to its string representation and writes it to stdout with a newline.
+    # Accepts any type.
+
+len(col: any) -> int
+    # Returns the length (element count) of a dynamic array, fixed array, string (bytes), or map.
+
+str(val: any) -> str
+    # Converts any primitive value to its string representation.
+    # int → decimal, float → decimal, bool → "true"/"false", str → identity.
+
+type(val: any) -> str
+    # Returns the runtime type name of val as a string.
+    # Examples: "int", "float", "str", "bool", "byte".
+
+append(arr: any, val: any) -> void
+    # Appends val to the end of dynamic array arr.
+    # arr must be a dynamic array ([]T). val must match the element type.
+
+swap(a: any, b: any) -> void
+    # Swaps the values of variables a and b in place.
+    # Both a and b must be simple variable names (not expressions or indexed elements).
+    # Both variables must be of the same type.
+    # Works with all types: int, float, str, byte, bool, record, etc.
+```
+
+**`swap` — detailed semantics:**
+
+`swap(a, b)` is equivalent to the classic three-line idiom but without the temporary variable allocation visible in source:
+
+```
+var tmp: T = a
+a = b
+b = tmp
+```
+
+It is the FORGE equivalent of Python's `a, b = b, a`. Example:
+
+```
+var x: int = 10
+var y: int = 99
+swap(x, y)
+# x == 99, y == 10
+
+var lo: float = 1.5
+var hi: float = 9.5
+swap(lo, hi)
+# lo == 9.5, hi == 1.5
+```
+
+**Implementation note:** `swap` is a special built-in form, not a user-defined procedure. It is intercepted before argument evaluation in the interpreter to obtain direct variable references, emitted as an inline block-scoped swap in the C backend, and emitted as two loads and two cross-stores in the LLVM backend. This is why it does not require `ref` parameters.
 
 ### 14.1 `forge.io` — Input/Output
 
@@ -2333,6 +2389,15 @@ Higher number = higher precedence (binds more tightly).
 ---
 
 ## Appendix C — Standard Library Quick Reference
+
+**Global built-ins (no import required):**
+
+```
+print(val)      len(col)     str(val)     type(val)    append(arr, val)
+swap(a, b)      free(col)    alloc(T, n)  panic(msg)   assert(cond)
+```
+
+**Standard library modules:**
 
 ```
 forge.io      print, print_raw, eprint, read_line, read_file, write_file

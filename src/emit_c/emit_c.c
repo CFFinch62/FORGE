@@ -555,6 +555,25 @@ static void emit_call(forge_emitter_t* e, forge_node_t* node) {
     if (callee->kind == NODE_IDENT) {
         const char* name = callee->data.name;
 
+        /* swap(a, b) builtin — emit an inline block-scoped swap */
+        if (strcmp(name, "swap") == 0 && node->data.call.arg_count == 2) {
+            forge_node_t* a = node->data.call.args[0];
+            forge_node_t* b = node->data.call.args[1];
+            forge_type_t* t = a->resolved_type;
+            EMIT(e, "do { ");
+            emit_type(e, t);
+            EMIT(e, " _forge_swap_tmp = ");
+            emit_expr(e, a);
+            EMIT(e, "; ");
+            emit_expr(e, a);
+            EMIT(e, " = ");
+            emit_expr(e, b);
+            EMIT(e, "; ");
+            emit_expr(e, b);
+            EMIT(e, " = _forge_swap_tmp; } while(0)");
+            return;
+        }
+
         /* print builtin */
         if (strcmp(name, "print") == 0) {
             EMIT(e, "forge_print(");

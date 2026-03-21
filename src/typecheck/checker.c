@@ -99,6 +99,19 @@ forge_checker_t* checker_create(forge_arena_t* arena, forge_strtable_t* strtable
     type_sig->return_type = type_prim(arena, TY_STR);
     hashmap_set(c->procs, "type", type_sig);
 
+    /* swap(a: any, b: any) -> void */
+    forge_proc_sig_t* swap_sig = ARENA_ALLOC(arena, forge_proc_sig_t);
+    swap_sig->name = "swap";
+    swap_sig->param_count = 2;
+    swap_sig->param_types = ARENA_ALLOC_ARRAY(arena, forge_type_t*, 2);
+    swap_sig->param_names = ARENA_ALLOC_ARRAY(arena, const char*, 2);
+    swap_sig->param_types[0] = type_prim(arena, TY_ANY);
+    swap_sig->param_types[1] = type_prim(arena, TY_ANY);
+    swap_sig->param_names[0] = "a";
+    swap_sig->param_names[1] = "b";
+    swap_sig->return_type = type_prim(arena, TY_VOID);
+    hashmap_set(c->procs, "swap", swap_sig);
+
     return c;
 }
 

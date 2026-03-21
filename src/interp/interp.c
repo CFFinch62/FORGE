@@ -806,6 +806,36 @@ forge_value_t interp_eval_expr(forge_interp_t* interp, forge_env_t* env,
         case NODE_CALL: {
             forge_node_t* callee = expr->data.call.callee;
 
+            /* swap(a, b) — special form: swap two variables in place without
+               evaluating to values first, so we can mutate via env_get_ptr. */
+            if (callee->kind == NODE_IDENT &&
+                strcmp(callee->data.name, "swap") == 0 &&
+                expr->data.call.arg_count == 2) {
+                forge_node_t* arg0 = expr->data.call.args[0];
+                forge_node_t* arg1 = expr->data.call.args[1];
+                if (arg0->kind != NODE_IDENT || arg1->kind != NODE_IDENT) {
+                    interp_error(interp, expr->line, expr->column,
+                                 "swap() arguments must be simple variables");
+                    return val_none();
+                }
+                forge_value_t* pa = env_get_ptr(env, arg0->data.name);
+                forge_value_t* pb = env_get_ptr(env, arg1->data.name);
+                if (!pa) {
+                    interp_error(interp, expr->line, expr->column,
+                                 "swap(): undefined variable '%s'", arg0->data.name);
+                    return val_none();
+                }
+                if (!pb) {
+                    interp_error(interp, expr->line, expr->column,
+                                 "swap(): undefined variable '%s'", arg1->data.name);
+                    return val_none();
+                }
+                forge_value_t tmp = *pa;
+                *pa = *pb;
+                *pb = tmp;
+                return val_void();
+            }
+
             /* Evaluate arguments */
             int arg_count = expr->data.call.arg_count;
             forge_value_t* args = NULL;
