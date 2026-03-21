@@ -3011,6 +3011,21 @@ int llvm_emit_stmt(forge_llvm_emitter_t* e, forge_node_t* node) {
                                    new_reg, cur_reg, val_str, src_ptr, node->line);
                         break;
                     }
+                    case TOK_AMP_EQ:
+                        LLVM_EMITLN(e, "  %%%d = and i64 %%%d, %s", new_reg, cur_reg, val_str);
+                        break;
+                    case TOK_PIPE_EQ:
+                        LLVM_EMITLN(e, "  %%%d = or i64 %%%d, %s", new_reg, cur_reg, val_str);
+                        break;
+                    case TOK_CARET_EQ:
+                        LLVM_EMITLN(e, "  %%%d = xor i64 %%%d, %s", new_reg, cur_reg, val_str);
+                        break;
+                    case TOK_LSHIFT_EQ:
+                        LLVM_EMITLN(e, "  %%%d = shl i64 %%%d, %s", new_reg, cur_reg, val_str);
+                        break;
+                    case TOK_RSHIFT_EQ:
+                        LLVM_EMITLN(e, "  %%%d = ashr i64 %%%d, %s", new_reg, cur_reg, val_str);
+                        break;
                     default:
                         LLVM_EMITLN(e, "  %%%d = add i64 %%%d, %s", new_reg, cur_reg, val_str);
                         break;
@@ -3081,6 +3096,21 @@ int llvm_emit_stmt(forge_llvm_emitter_t* e, forge_node_t* node) {
                         case TOK_STAR_EQ:
                             LLVM_EMITLN(e, "  %%%d = %s %s %%%d, %s", new_val,
                                        is_float ? "fmul" : "mul", elem_type_str, cur_val, val_str);
+                            break;
+                        case TOK_AMP_EQ:
+                            LLVM_EMITLN(e, "  %%%d = and %s %%%d, %s", new_val, elem_type_str, cur_val, val_str);
+                            break;
+                        case TOK_PIPE_EQ:
+                            LLVM_EMITLN(e, "  %%%d = or %s %%%d, %s", new_val, elem_type_str, cur_val, val_str);
+                            break;
+                        case TOK_CARET_EQ:
+                            LLVM_EMITLN(e, "  %%%d = xor %s %%%d, %s", new_val, elem_type_str, cur_val, val_str);
+                            break;
+                        case TOK_LSHIFT_EQ:
+                            LLVM_EMITLN(e, "  %%%d = shl %s %%%d, %s", new_val, elem_type_str, cur_val, val_str);
+                            break;
+                        case TOK_RSHIFT_EQ:
+                            LLVM_EMITLN(e, "  %%%d = ashr %s %%%d, %s", new_val, elem_type_str, cur_val, val_str);
                             break;
                         default:
                             LLVM_EMITLN(e, "  %%%d = add %s %%%d, %s", new_val, elem_type_str, cur_val, val_str);

@@ -1320,12 +1320,18 @@ forge_result_t interp_exec_stmt(forge_interp_t* interp, forge_env_t* env,
 
             /* Map compound operator to binary operator */
             int binop;
+            int is_bitwise = 0;
             switch (op) {
-                case TOK_PLUS_EQ:  binop = TOK_PLUS; break;
-                case TOK_MINUS_EQ: binop = TOK_MINUS; break;
-                case TOK_STAR_EQ:  binop = TOK_STAR; break;
-                case TOK_SLASH_EQ: binop = TOK_SLASH; break;
+                case TOK_PLUS_EQ:    binop = TOK_PLUS;    break;
+                case TOK_MINUS_EQ:   binop = TOK_MINUS;   break;
+                case TOK_STAR_EQ:    binop = TOK_STAR;    break;
+                case TOK_SLASH_EQ:   binop = TOK_SLASH;   break;
                 case TOK_PERCENT_EQ: binop = TOK_PERCENT; break;
+                case TOK_AMP_EQ:     binop = TOK_AMP;     is_bitwise = 1; break;
+                case TOK_PIPE_EQ:    binop = TOK_PIPE;    is_bitwise = 1; break;
+                case TOK_CARET_EQ:   binop = TOK_CARET;   is_bitwise = 1; break;
+                case TOK_LSHIFT_EQ:  binop = TOK_LSHIFT;  is_bitwise = 1; break;
+                case TOK_RSHIFT_EQ:  binop = TOK_RSHIFT;  is_bitwise = 1; break;
                 default:
                     interp_error(interp, stmt->line, stmt->column,
                                  "Unknown compound assignment operator");
@@ -1335,8 +1341,9 @@ forge_result_t interp_exec_stmt(forge_interp_t* interp, forge_env_t* env,
             }
 
             /* Perform the binary operation */
-            forge_value_t new_val = eval_binary_arith(interp, binop, current, rhs,
-                                                       stmt->line, stmt->column);
+            forge_value_t new_val = is_bitwise
+                ? eval_binary_bitwise(interp, binop, current, rhs, stmt->line, stmt->column)
+                : eval_binary_arith(interp, binop, current, rhs, stmt->line, stmt->column);
             val_free(&current);
             val_free(&rhs);
 
@@ -3002,7 +3009,7 @@ static int try_stdlib_time(forge_interp_t* interp, const char* proc_name,
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * forge.buf Internal Buffer Pool for Interpreter
- * ───────────────────────────────────────────────────────────────────────────── */
+ * ────────────��──────────────────────────────────────────────────────────────── */
 
 #define INTERP_BUF_POOL_SIZE 256
 

@@ -473,6 +473,33 @@ var c: int32 = int32(a)    # int → int32 (may truncate)
 var d: str = str(a)        # any → string
 ```
 
+### 4.4 Runtime Type Inspection
+
+Use the built-in `type()` function to get the runtime type of any value as a string:
+
+```forge
+var t: str = type(42)        # "int"
+var t: str = type("hello")   # "str"
+var t: str = type(true)      # "bool"
+var t: str = type(3.14)      # "float"
+```
+
+**Signature:** `type(val: any) -> str`
+
+This is useful when working with values of unknown or dynamic origin, such as data read from external input:
+
+```forge
+var raw: str = read_line()
+var parsed: ?int = forge.str.to_int(raw)
+
+if parsed is some:
+    print("Got int: " + str(parsed.value))
+else:
+    print("Not an integer")
+```
+
+For compile-time type safety, prefer the static type checker (`forge check`) and the type system rather than runtime `type()` checks where possible.
+
 ---
 
 ## 5. Variables and Constants

@@ -77,6 +77,20 @@ var c: int32 = int32(a)     # narrowing (may truncate)
 var s: str   = str(a)       # any primitive → string
 ```
 
+### Runtime Type Inspection
+
+```
+var t: str = type(42)        # "int"
+var t: str = type("hello")   # "str"
+var t: str = type(true)      # "bool"
+var t: str = type(3.14)      # "float"
+
+if type(x) == "int":
+    print("x is an integer")
+```
+
+`type(val) -> str` — returns the runtime type name of any value as a string. Accepts any type.
+
 ### Optional Types (`?T`)
 
 FORGE has no null pointers. Use `?T` for values that may be absent.

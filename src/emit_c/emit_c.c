@@ -812,9 +812,11 @@ void emit_stmt(forge_emitter_t* e, forge_node_t* node) {
                 case TOK_STAR_EQ:    EMIT(e, " *= "); break;
                 case TOK_SLASH_EQ:   EMIT(e, " /= "); break;
                 case TOK_PERCENT_EQ: EMIT(e, " %%= "); break;
-                case TOK_AMP_EQ:     EMIT(e, " &= "); break;
-                case TOK_PIPE_EQ:    EMIT(e, " |= "); break;
-                case TOK_CARET_EQ:   EMIT(e, " ^= "); break;
+                case TOK_AMP_EQ:     EMIT(e, " &= ");  break;
+                case TOK_PIPE_EQ:    EMIT(e, " |= ");  break;
+                case TOK_CARET_EQ:   EMIT(e, " ^= ");  break;
+                case TOK_LSHIFT_EQ:  EMIT(e, " <<= "); break;
+                case TOK_RSHIFT_EQ:  EMIT(e, " >>= "); break;
                 default:             EMIT(e, " /* op %d */ ", op); break;
             }
             emit_expr(e, node->data.compound_assign.value);
