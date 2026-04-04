@@ -2643,6 +2643,33 @@ static int try_stdlib_str(forge_interp_t* interp, const char* proc_name,
         *result = val_int(0);
         return 1;
     }
+    if (strcmp(proc_name, "from_float") == 0) {
+        /* forge.str.from_float(v: float, decimals: int) -> str */
+        double v = 0.0;
+        int decimals = 2;
+        if (arg_count >= 1) {
+            v = args[0].kind == VAL_FLOAT ? args[0].as.f : (double)args[0].as.i;
+        }
+        if (arg_count >= 2) {
+            decimals = (int)(args[1].kind == VAL_INT ? args[1].as.i : (int64_t)args[1].as.f);
+            if (decimals < 0) decimals = 0;
+            if (decimals > 10) decimals = 10;
+        }
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%.*f", decimals, v);
+        *result = val_str_copy(buf, (int)strlen(buf));
+        return 1;
+    }
+    if (strcmp(proc_name, "from_char") == 0) {
+        /* forge.str.from_char(code: int) -> str  — ASCII code → 1-char string */
+        if (arg_count >= 1 && args[0].kind == VAL_INT) {
+            char c = (char)(args[0].as.i & 0xFF);
+            *result = val_str_copy(&c, 1);
+            return 1;
+        }
+        *result = val_str_lit("");
+        return 1;
+    }
     return 0;
 }
 
