@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# nmea_parser.fg — NMEA Sentence Decoder
+#
+# Responsibilities
+#   • Listen on nmea_raw_sentence
+#   • Identify each sentence type via forge.nmea.sentence_type()
+#   • Validate checksum via forge.nmea.validate()
+#   • Decode payload using forge.nmea.parse_gga() / parse_rmc() / field()
+#   • Emit typed instrument channels (position_update, speed_update, …)
+#   • Detect !AIVDM / !AIVDO and hand off raw payload to ais_decoder
+#
+# Sentence coverage:
+#   GGA  — position, altitude, satellites, HDOP, fix quality
+#   RMC  — position, SOG, COG, date, status
+#   DPT  — depth below transducer + offset
+#   MWV  — apparent/true wind speed and angle
+#   HDT  — true heading
+#   MTW  — water temperature
+#   AIVDM — AIS VHF data (forwarded to ais_decoder)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import forge.nmea
+import forge.str
+
+# ─────────────────────────────────────────────────────────────────────────────
+# on-handler — fires for every raw sentence from sim or serial
+# ─────────────────────────────────────────────────────────────────────────────
+
+on nmea_raw_sentence as raw:
+    # Strip leading $ if present
+    var sentence: str = raw
+    if forge.str.starts_with(raw, "$"):
+        sentence = forge.str.substr(raw, 1, forge.str.len(raw) - 1)
+
+    # Identify sentence type (e.g. "GGA", "RMC", "AIVDM")
+    var stype: str = forge.nmea.sentence_type(sentence)
+
+    if stype == "GGA":
+        handle_gga(sentence)
+    elif stype == "RMC":
+        handle_rmc(sentence)
+    elif stype == "DPT":
+        handle_dpt(sentence)
+    elif stype == "MWV":
+        handle_mwv(sentence)
+    elif stype == "HDT":
+        handle_hdt(sentence)
+    elif stype == "MTW":
+        handle_mtw(sentence)
+    elif stype == "VTG":
+        handle_vtg(sentence)
+    elif stype == "VDM":
+        handle_aivdm(sentence)
+    elif stype == "VDO":
+        handle_aivdm(sentence)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sentence handlers
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc handle_gga(sentence: str) -> void:
+    # GGA fields: 1=time, 2=lat, 3=N/S, 4=lon, 5=E/W, 6=fix, 7=sats, 8=HDOP, 9=alt
+    var lat  : str = forge.nmea.field(sentence, 2)
+    var lat_d: str = forge.nmea.field(sentence, 3)
+    var lon  : str = forge.nmea.field(sentence, 4)
+    var lon_d: str = forge.nmea.field(sentence, 5)
+    emit position_update -> lat + " " + lat_d + "|" + lon + " " + lon_d
+
+proc handle_rmc(sentence: str) -> void:
+    # RMC fields: 1=time, 2=status, 3=lat, 4=N/S, 5=lon, 6=E/W, 7=SOG, 8=COG
+    var sog: str = forge.nmea.field(sentence, 7)
+    var cog: str = forge.nmea.field(sentence, 8)
+    emit speed_update -> sog
+    emit cog_update   -> cog
+
+proc handle_dpt(sentence: str) -> void:
+    # DPT: field 1 = depth (m), field 2 = offset (m)
+    var depth_str: str = forge.nmea.field(sentence, 1)
+    emit depth_update -> depth_str
+
+proc handle_mwv(sentence: str) -> void:
+    # MWV: field 1 = angle, field 2 = ref (R/T), field 3 = speed, field 4 = units
+    var angle_str: str = forge.nmea.field(sentence, 1)
+    var speed_str: str = forge.nmea.field(sentence, 3)
+    emit wind_update -> angle_str + "|" + speed_str
+
+proc handle_hdt(sentence: str) -> void:
+    # HDT: field 1 = heading true
+    var hdg_str: str = forge.nmea.field(sentence, 1)
+    emit heading_update -> hdg_str
+
+proc handle_mtw(sentence: str) -> void:
+    var temp_str: str = forge.nmea.field(sentence, 1)
+    emit temp_update -> temp_str
+
+proc handle_vtg(sentence: str) -> void:
+    # VTG: field 5 = SOG knots (field 1 = COG true, field 3 = COG magnetic)
+    var sog_str: str = forge.nmea.field(sentence, 5)
+    emit speed_update -> sog_str
+
+proc handle_aivdm(sentence: str) -> void:
+    # AIS payload is in field 5; pass to ais_decoder for bit-level decoding
+    var payload: str = forge.nmea.field(sentence, 5)
+    if forge.str.len(payload) > 0:
+        ais_decoder.decode(payload)

@@ -2451,16 +2451,15 @@ static forge_value_t stdlib_str_reverse(forge_interp_t* interp, forge_value_t* a
 static forge_value_t stdlib_str_char_at(forge_interp_t* interp, forge_value_t* args, int arg_count) {
     (void)interp;
     if (arg_count < 2 || args[0].kind != VAL_STR || args[1].kind != VAL_INT)
-        return val_str_lit("");
+        return val_int(0);
 
     const char* s = args[0].as.str.data;
     int64_t idx = args[1].as.i;
     int len = args[0].as.str.len;
 
-    if (idx < 0 || idx >= len) return val_str_lit("");
+    if (idx < 0 || idx >= len) return val_int(0);
 
-    char buf[2] = { s[idx], '\0' };
-    return val_str_copy(buf, 1);
+    return val_int((int64_t)(unsigned char)s[idx]);
 }
 
 static forge_value_t stdlib_str_split(forge_interp_t* interp, forge_value_t* args, int arg_count) {
@@ -2657,6 +2656,22 @@ static int try_stdlib_str(forge_interp_t* interp, const char* proc_name,
         }
         char buf[64];
         snprintf(buf, sizeof(buf), "%.*f", decimals, v);
+        *result = val_str_copy(buf, (int)strlen(buf));
+        return 1;
+    }
+    if (strcmp(proc_name, "from_int") == 0) {
+        /* forge.str.from_int(v: int) -> str */
+        int64_t v = 0;
+        if (arg_count >= 1) {
+            if (args[0].kind == VAL_INT || args[0].kind == VAL_BYTE)
+                v = args[0].as.i;
+            else if (args[0].kind == VAL_UINT)
+                v = (int64_t)args[0].as.u;
+            else if (args[0].kind == VAL_FLOAT)
+                v = (int64_t)args[0].as.f;
+        }
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%lld", (long long)v);
         *result = val_str_copy(buf, (int)strlen(buf));
         return 1;
     }

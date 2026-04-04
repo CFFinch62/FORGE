@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# logger.fg — NMEA Sentence File Logger
+#
+# Responsibilities
+#   • Optionally write every raw NMEA sentence to a timestamped .nmea log file
+#   • Provide enable() / disable() / is_enabled() procs for the UI toggle
+#   • Log file name format:  voyage_YYYYMMDD_HHMMSS.nmea
+#
+# The on-handler subscribes to nmea_raw_sentence independently of the display —
+# this is the FORGE channel model working as designed: one emitter, N handlers.
+#
+# Phase 1: stub (no file I/O yet)
+# Phase 2: wire up forge.io file-append when available
+# ─────────────────────────────────────────────────────────────────────────────
+
+import forge.io
+import forge.str
+import forge.time
+
+# ─────────────────────────────────────────────────────────────────────────────
+# State
+# ─────────────────────────────────────────────────────────────────────────────
+
+var log_enabled  : bool = false
+var log_filename : str  = ""
+var log_count    : int  = 0     # sentences written this session
+
+# ─────────────────────────────────────────────────────────────────────────────
+# on-handler — fires on every raw sentence, same channel as nmea_parser
+# ─────────────────────────────────────────────────────────────────────────────
+
+on nmea_raw_sentence as raw:
+    if log_enabled == false:
+        return
+    log_count = log_count + 1
+    # TODO Phase 2: forge.io.append_file(log_filename, raw + "\n")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public API
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc enable() -> void:
+    if log_enabled:
+        return
+    # TODO Phase 2: build timestamped filename from forge.time
+    log_filename = "voyage_log.nmea"
+    log_count    = 0
+    log_enabled  = true
+
+proc disable() -> void:
+    log_enabled = false
+
+proc is_enabled() -> bool:
+    return log_enabled
+
+proc sentence_count() -> int:
+    return log_count
+
+proc filename() -> str:
+    return log_filename

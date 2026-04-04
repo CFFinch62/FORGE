@@ -1,0 +1,859 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# instruments.fg — FORGE Instruments  (entry point)
+# Run:  ./forge run apps/forge_instruments/instruments.fg
+# ─────────────────────────────────────────────────────────────────────────────
+
+import forge.gui
+import forge.str
+import forge.math
+import forge.sys
+import forge.io
+
+import nmea_parser
+import ais_decoder
+import serial_reader
+import nmea_sim
+import logger
+
+# ── channels ─────────────────────────────────────────────────────────────────
+
+channel nmea_raw_sentence  : str
+channel position_update    : str
+channel speed_update       : str
+channel cog_update         : str
+channel heading_update     : str
+channel depth_update       : str
+channel temp_update        : str
+channel wind_update        : str
+channel ais_target_update  : str
+channel alarm_event        : str
+
+# ── display state (written by on-handlers, read by the render loop) ───────────
+
+var g_lat_str      : str   = "---"
+var g_lon_str      : str   = "---"
+var g_lat_f        : float = 0.0      # own-ship decimal degrees (for radar)
+var g_lon_f        : float = 0.0
+var g_sog_str      : str   = "---"
+var g_cog_str      : str   = "---"
+var g_hdg_str      : str   = "---"
+var g_hdg_deg      : float = 0.0
+var g_hdg_disp     : float = 0.0      # smoothly interpolated for compass needle
+var g_depth_str    : str   = "---"
+var g_temp_str     : str   = "---"
+var g_wind_ang_str : str   = "---"
+var g_wind_spd_str : str   = "---"
+var g_wind_ang_deg : float = 0.0
+var g_wind_ang_disp: float = 0.0      # smoothly interpolated for wind rose needle
+var g_log_id       : int   = 0
+
+# ── AIS target ring buffer (10 slots, MMSI-keyed) ────────────────────────────
+# Each slot: pipe-delimited  MMSI|SOG|LAT|LON|COG|HDG|STATUS   (empty = unused)
+var g_ais_t0    : str = ""
+var g_ais_t1    : str = ""
+var g_ais_t2    : str = ""
+var g_ais_t3    : str = ""
+var g_ais_t4    : str = ""
+var g_ais_t5    : str = ""
+var g_ais_t6    : str = ""
+var g_ais_t7    : str = ""
+var g_ais_t8    : str = ""
+var g_ais_t9    : str = ""
+var g_ais_next  : int = 0    # next slot to overwrite when no MMSI match
+var g_ais_scroll: int = 0    # first visible row in the AIS list panel
+
+# ── operational state ─────────────────────────────────────────────────────────
+var g_settings_open : bool = false
+var g_port_str      : str  = "/dev/ttyUSB0"
+var g_baud_idx      : int  = 0        # 0=4800 1=9600 2=38400 3=115200
+var g_mode          : str  = "LIVE"   # "SIM" or "LIVE" — sim does NOT auto-start
+var g_connected     : bool = false
+var g_paused        : bool = false    # freeze log + display updates
+
+# ── display / font state ──────────────────────────────────────────────────────
+var g_font_size_idx : int  = 1        # 0=Small 1=Medium 2=Large 3=XLarge
+var g_data_size     : int  = 20
+var g_font_path     : str  = ""
+var g_font_id       : int  = -1
+var g_font_status   : str  = ""
+var g_log_size_idx  : int  = 2
+var g_log_font_size : int  = 13
+
+# ── on-handlers ───────────────────────────────────────────────────────────────
+
+on nmea_raw_sentence as raw:
+    if g_paused:
+        return
+    if forge.str.contains(raw, "GGA"):
+        forge.gui.log_add(g_log_id, raw,  80, 180, 255, 255)   # blue  — position
+    elif forge.str.contains(raw, "RMC"):
+        forge.gui.log_add(g_log_id, raw, 100, 230, 130, 255)   # green — speed/pos
+    elif forge.str.contains(raw, "DPT"):
+        forge.gui.log_add(g_log_id, raw,  80, 210, 210, 255)   # cyan  — depth
+    elif forge.str.contains(raw, "MWV"):
+        forge.gui.log_add(g_log_id, raw, 200, 160, 255, 255)   # violet — wind
+    elif forge.str.contains(raw, "HDT"):
+        forge.gui.log_add(g_log_id, raw, 255, 210,  80, 255)   # amber — heading
+    elif forge.str.contains(raw, "MTW"):
+        forge.gui.log_add(g_log_id, raw, 255, 140,  80, 255)   # orange — water temp
+    elif forge.str.contains(raw, "VDM"):
+        forge.gui.log_add(g_log_id, raw, 255,  90,  90, 255)   # red   — AIS
+    else:
+        forge.gui.log_add(g_log_id, raw, 160, 160, 160, 255)   # grey  — other
+
+on position_update as pos:
+    if g_paused:
+        return
+    var sep : int = forge.str.find(pos, "|")
+    if sep >= 0:
+        g_lat_str = forge.str.substr(pos, 0, sep)
+        g_lon_str = forge.str.substr(pos, sep + 1, forge.str.len(pos) - sep - 1)
+        # Also convert NMEA DDMM.MM to decimal degrees for the radar
+        var lat_sp : int = forge.str.find(g_lat_str, " ")
+        var lon_sp : int = forge.str.find(g_lon_str, " ")
+        if lat_sp >= 0:
+            var lat_num : str = forge.str.substr(g_lat_str, 0, lat_sp)
+            var lat_dir : str = forge.str.substr(g_lat_str, lat_sp + 1, 1)
+            g_lat_f = nmea_pos_to_decimal(lat_num, lat_dir)
+        if lon_sp >= 0:
+            var lon_num : str = forge.str.substr(g_lon_str, 0, lon_sp)
+            var lon_dir : str = forge.str.substr(g_lon_str, lon_sp + 1, 1)
+            g_lon_f = nmea_pos_to_decimal(lon_num, lon_dir)
+
+on speed_update as spd:
+    if g_paused:
+        return
+    g_sog_str = spd
+
+on cog_update as cog:
+    if g_paused:
+        return
+    g_cog_str = cog
+
+on heading_update as hdg:
+    if g_paused:
+        return
+    g_hdg_str = hdg
+    g_hdg_deg = forge.str.to_float(hdg)
+
+on depth_update as dep:
+    if g_paused:
+        return
+    g_depth_str = dep
+
+on temp_update as tmp:
+    if g_paused:
+        return
+    g_temp_str = tmp
+
+on wind_update as wnd:
+    if g_paused:
+        return
+    var sep : int = forge.str.find(wnd, "|")
+    if sep >= 0:
+        g_wind_ang_str = forge.str.substr(wnd, 0, sep)
+        g_wind_spd_str = forge.str.substr(wnd, sep + 1, forge.str.len(wnd) - sep - 1)
+        g_wind_ang_deg = forge.str.to_float(g_wind_ang_str)
+
+on ais_target_update as tgt:
+    if g_paused:
+        return
+    var p0 : int = forge.str.find(tgt, "|")
+    if p0 < 0:
+        return
+    var new_mmsi : str = forge.str.substr(tgt, 0, p0)
+    # Upsert: update existing slot if MMSI already known
+    var m0 : int = forge.str.find(g_ais_t0, "|")
+    if m0 >= 0:
+        if forge.str.substr(g_ais_t0, 0, m0) == new_mmsi:
+            g_ais_t0 = tgt
+            return
+    var m1 : int = forge.str.find(g_ais_t1, "|")
+    if m1 >= 0:
+        if forge.str.substr(g_ais_t1, 0, m1) == new_mmsi:
+            g_ais_t1 = tgt
+            return
+    var m2 : int = forge.str.find(g_ais_t2, "|")
+    if m2 >= 0:
+        if forge.str.substr(g_ais_t2, 0, m2) == new_mmsi:
+            g_ais_t2 = tgt
+            return
+    var m3 : int = forge.str.find(g_ais_t3, "|")
+    if m3 >= 0:
+        if forge.str.substr(g_ais_t3, 0, m3) == new_mmsi:
+            g_ais_t3 = tgt
+            return
+    var m4 : int = forge.str.find(g_ais_t4, "|")
+    if m4 >= 0:
+        if forge.str.substr(g_ais_t4, 0, m4) == new_mmsi:
+            g_ais_t4 = tgt
+            return
+    var m5 : int = forge.str.find(g_ais_t5, "|")
+    if m5 >= 0:
+        if forge.str.substr(g_ais_t5, 0, m5) == new_mmsi:
+            g_ais_t5 = tgt
+            return
+    var m6 : int = forge.str.find(g_ais_t6, "|")
+    if m6 >= 0:
+        if forge.str.substr(g_ais_t6, 0, m6) == new_mmsi:
+            g_ais_t6 = tgt
+            return
+    var m7 : int = forge.str.find(g_ais_t7, "|")
+    if m7 >= 0:
+        if forge.str.substr(g_ais_t7, 0, m7) == new_mmsi:
+            g_ais_t7 = tgt
+            return
+    var m8 : int = forge.str.find(g_ais_t8, "|")
+    if m8 >= 0:
+        if forge.str.substr(g_ais_t8, 0, m8) == new_mmsi:
+            g_ais_t8 = tgt
+            return
+    var m9 : int = forge.str.find(g_ais_t9, "|")
+    if m9 >= 0:
+        if forge.str.substr(g_ais_t9, 0, m9) == new_mmsi:
+            g_ais_t9 = tgt
+            return
+    # New MMSI — write to next ring slot
+    if g_ais_next == 0:
+        g_ais_t0 = tgt
+    elif g_ais_next == 1:
+        g_ais_t1 = tgt
+    elif g_ais_next == 2:
+        g_ais_t2 = tgt
+    elif g_ais_next == 3:
+        g_ais_t3 = tgt
+    elif g_ais_next == 4:
+        g_ais_t4 = tgt
+    elif g_ais_next == 5:
+        g_ais_t5 = tgt
+    elif g_ais_next == 6:
+        g_ais_t6 = tgt
+    elif g_ais_next == 7:
+        g_ais_t7 = tgt
+    elif g_ais_next == 8:
+        g_ais_t8 = tgt
+    elif g_ais_next == 9:
+        g_ais_t9 = tgt
+    g_ais_next = (g_ais_next + 1) % 10
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+proc apply_font_size() -> void:
+    if g_font_size_idx == 0:
+        g_data_size = 22
+    elif g_font_size_idx == 1:
+        g_data_size = 28
+    elif g_font_size_idx == 2:
+        g_data_size = 34
+    else:
+        g_data_size = 40
+
+# Convert NMEA DDMM.MM string + direction char to decimal degrees.
+proc nmea_pos_to_decimal(nmea_val: str, dir: str) -> float:
+    var val     : float = forge.str.to_float(nmea_val)
+    var deg_f   : float = forge.math.floor(val / 100.0)
+    var mins    : float = val - deg_f * 100.0
+    var decimal : float = deg_f + mins / 60.0
+    if dir == "S":
+        decimal = 0.0 - decimal
+    if dir == "W":
+        decimal = 0.0 - decimal
+    return decimal
+
+# Reset all received data (for the CLEAR DATA button).
+proc clear_all_data() -> void:
+    forge.gui.log_clear(g_log_id)
+    g_lat_str      = "---"
+    g_lon_str      = "---"
+    g_lat_f        = 0.0
+    g_lon_f        = 0.0
+    g_sog_str      = "---"
+    g_cog_str      = "---"
+    g_hdg_str      = "---"
+    g_hdg_deg      = 0.0
+    g_depth_str    = "---"
+    g_temp_str     = "---"
+    g_wind_ang_str = "---"
+    g_wind_spd_str = "---"
+    g_wind_ang_deg = 0.0
+    g_ais_t0 = ""
+    g_ais_t1 = ""
+    g_ais_t2 = ""
+    g_ais_t3 = ""
+    g_ais_t4 = ""
+    g_ais_t5 = ""
+    g_ais_t6 = ""
+    g_ais_t7 = ""
+    g_ais_t8 = ""
+    g_ais_t9 = ""
+    g_ais_next   = 0
+    g_ais_scroll = 0
+
+# Return the AIS slot string for a given index (0–9).
+proc get_ais_slot(idx: int) -> str:
+    if idx == 0:
+        return g_ais_t0
+    elif idx == 1:
+        return g_ais_t1
+    elif idx == 2:
+        return g_ais_t2
+    elif idx == 3:
+        return g_ais_t3
+    elif idx == 4:
+        return g_ais_t4
+    elif idx == 5:
+        return g_ais_t5
+    elif idx == 6:
+        return g_ais_t6
+    elif idx == 7:
+        return g_ais_t7
+    elif idx == 8:
+        return g_ais_t8
+    elif idx == 9:
+        return g_ais_t9
+    return ""
+
+# ── drawing helpers ───────────────────────────────────────────────────────────
+
+proc draw_panel(x: int, y: int, w: int, h: int, label: str, value: str) -> void:
+    forge.gui.draw_rect(x + 2, y + 2, w - 4, h - 4, 16, 28, 50, 255)
+    forge.gui.draw_rect_lines(x + 2, y + 2, w - 4, h - 4, 45, 85, 148, 255)
+    forge.gui.draw_text(label, x + 12, y + 10, 13, 100, 155, 220, 255)
+    forge.gui.draw_text(value, x + 12, y + 46, g_data_size, 228, 244, 255, 255)
+
+# vr/vg/vb set the value text colour to match the NMEA sentence colour in the log
+proc draw_half_panel(x: int, y: int, w: int, h: int, label: str, value: str, vr: int, vg: int, vb: int) -> void:
+    forge.gui.draw_rect(x + 2, y + 2, w - 4, h - 4, 16, 28, 50, 255)
+    forge.gui.draw_rect_lines(x + 2, y + 2, w - 4, h - 4, 45, 85, 148, 255)
+    forge.gui.draw_text(label, x + 10, y + 6, 11, 100, 155, 220, 255)
+    forge.gui.draw_text(value, x + 10, y + 28, g_data_size - 2, vr, vg, vb, 255)
+
+proc draw_position_panel(x: int, y: int, w: int, h: int) -> void:
+    forge.gui.draw_rect(x + 2, y + 2, w - 4, h - 4, 16, 28, 50, 255)
+    forge.gui.draw_rect_lines(x + 2, y + 2, w - 4, h - 4, 45, 85, 148, 255)
+    forge.gui.draw_text("POSITION", x + 12, y + 10, 13, 100, 155, 220, 255)
+    var pos_size : int = g_data_size + 6
+    var lat_y    : int = y + 15 + pos_size
+    var lon_y    : int = lat_y + pos_size + 8
+    var lat_w    : int = forge.gui.measure_text(g_lat_str, pos_size)
+    var lon_w    : int = forge.gui.measure_text(g_lon_str, pos_size)
+    forge.gui.draw_text(g_lat_str, x + (w - lat_w) / 2, lat_y, pos_size, 80, 180, 255, 255)
+    forge.gui.draw_text(g_lon_str, x + (w - lon_w) / 2, lon_y, pos_size, 80, 180, 255, 255)
+
+proc draw_compass(x: int, y: int, w: int, h: int) -> void:
+    forge.gui.draw_rect(x + 2, y + 2, w - 4, h - 4, 16, 28, 50, 255)
+    forge.gui.draw_rect_lines(x + 2, y + 2, w - 4, h - 4, 45, 85, 148, 255)
+    forge.gui.draw_text("HEADING", x + 12, y + 10, 13, 100, 155, 220, 255)
+    var cx  : int   = x + w / 2
+    var cy  : int   = y + 95
+    var r   : float = 62.0
+    var pi  : float = forge.math.PI()
+    forge.gui.draw_circle_lines(cx, cy, r, 55, 100, 170, 255)
+    forge.gui.draw_circle_lines(cx, cy, r - 6.0, 35, 65, 110, 255)
+    var ri : int = forge.math.to_int(r - 6.0)
+    var ro : int = forge.math.to_int(r)
+    forge.gui.draw_line(cx, cy - ri, cx, cy - ro, 180, 220, 255, 255)
+    forge.gui.draw_line(cx, cy + ri, cx, cy + ro, 100, 140, 200, 255)
+    forge.gui.draw_line(cx + ri, cy, cx + ro, cy, 100, 140, 200, 255)
+    forge.gui.draw_line(cx - ro, cy, cx - ri, cy, 100, 140, 200, 255)
+    forge.gui.draw_text("N", cx - 4,       cy - ro - 14, 11, 180, 220, 255, 255)
+    forge.gui.draw_text("S", cx - 4,       cy + ro + 3,  11, 100, 140, 200, 255)
+    forge.gui.draw_text("E", cx + ro + 4,  cy - 6,       11, 100, 140, 200, 255)
+    forge.gui.draw_text("W", cx - ro - 12, cy - 6,       11, 100, 140, 200, 255)
+    var d45o : int = forge.math.to_int(r * 0.707)
+    var d45i : int = forge.math.to_int((r - 6.0) * 0.707)
+    forge.gui.draw_line(cx + d45i, cy - d45i, cx + d45o, cy - d45o, 70, 110, 180, 255)
+    forge.gui.draw_line(cx + d45i, cy + d45i, cx + d45o, cy + d45o, 70, 110, 180, 255)
+    forge.gui.draw_line(cx - d45i, cy + d45i, cx - d45o, cy + d45o, 70, 110, 180, 255)
+    forge.gui.draw_line(cx - d45i, cy - d45i, cx - d45o, cy - d45o, 70, 110, 180, 255)
+    var hdg_rad : float = g_hdg_disp * pi / 180.0
+    var nr      : float = r - 12.0
+    var tip_x   : int   = cx + forge.math.to_int(nr * forge.math.sin(hdg_rad))
+    var tip_y   : int   = cy - forge.math.to_int(nr * forge.math.cos(hdg_rad))
+    forge.gui.draw_line(cx, cy, tip_x, tip_y, 255, 80, 80, 255)
+    forge.gui.draw_circle(cx, cy, 3.0, 255, 80, 80, 255)
+    var hdg_sz : int = g_data_size / 2 + 4
+    forge.gui.draw_text(g_hdg_str + " M", x + 105, y + h - hdg_sz - 8, hdg_sz, 255, 210, 80, 255)
+
+proc draw_wind_rose(x: int, y: int, w: int, h: int) -> void:
+    forge.gui.draw_rect(x + 2, y + 2, w - 4, h - 4, 16, 28, 50, 255)
+    forge.gui.draw_rect_lines(x + 2, y + 2, w - 4, h - 4, 45, 85, 148, 255)
+    forge.gui.draw_text("WIND", x + 12, y + 10, 13, 100, 155, 220, 255)
+    var cx  : int   = x + w / 2
+    var cy  : int   = y + 90
+    var r   : float = 55.0
+    var pi  : float = forge.math.PI()
+    forge.gui.draw_circle_lines(cx, cy, r, 55, 100, 170, 255)
+    forge.gui.draw_circle_lines(cx, cy, r - 5.0, 35, 65, 110, 255)
+    var ri  : int = forge.math.to_int(r - 5.0)
+    var ro  : int = forge.math.to_int(r)
+    forge.gui.draw_line(cx, cy - ri, cx, cy - ro, 180, 220, 255, 255)
+    forge.gui.draw_line(cx, cy + ri, cx, cy + ro, 100, 140, 200, 255)
+    forge.gui.draw_line(cx + ri, cy, cx + ro, cy, 100, 140, 200, 255)
+    forge.gui.draw_line(cx - ro, cy, cx - ri, cy, 100, 140, 200, 255)
+    forge.gui.draw_text("N", cx - 4,       cy - ro - 13, 10, 180, 220, 255, 255)
+    forge.gui.draw_text("S", cx - 4,       cy + ro + 2,  10, 100, 140, 200, 255)
+    forge.gui.draw_text("E", cx + ro + 3,  cy - 5,       10, 100, 140, 200, 255)
+    forge.gui.draw_text("W", cx - ro - 11, cy - 5,       10, 100, 140, 200, 255)
+    var d45o : int = forge.math.to_int(r * 0.707)
+    var d45i : int = forge.math.to_int((r - 5.0) * 0.707)
+    forge.gui.draw_line(cx + d45i, cy - d45i, cx + d45o, cy - d45o, 70, 110, 180, 255)
+    forge.gui.draw_line(cx + d45i, cy + d45i, cx + d45o, cy + d45o, 70, 110, 180, 255)
+    forge.gui.draw_line(cx - d45i, cy + d45i, cx - d45o, cy + d45o, 70, 110, 180, 255)
+    forge.gui.draw_line(cx - d45i, cy - d45i, cx - d45o, cy - d45o, 70, 110, 180, 255)
+    var ang_rad : float = g_wind_ang_disp * pi / 180.0
+    var nr      : float = r - 10.0
+    var tip_x   : int   = cx + forge.math.to_int(nr * forge.math.sin(ang_rad))
+    var tip_y   : int   = cy - forge.math.to_int(nr * forge.math.cos(ang_rad))
+    forge.gui.draw_line(cx, cy, tip_x, tip_y, 200, 160, 255, 255)
+    forge.gui.draw_circle(cx, cy, 3.0, 200, 160, 255, 255)
+    var wnd_sz : int = g_data_size / 2 + 4
+    forge.gui.draw_text(g_wind_spd_str + " kts", x + 50, y + h - wnd_sz - 8, wnd_sz, 200, 160, 255, 255)
+
+# ── AIS target list panel (scrollable) ───────────────────────────────────────
+
+# Draw one AIS target row.  Format: MMSI|SOG|LAT|LON|COG|HDG|STATUS
+proc draw_ais_row(slot: str, row_y: int) -> void:
+    if forge.str.len(slot) < 3:
+        return
+    var parts  : array = forge.str.split(slot, "|")
+    var plen   : int   = len(parts)
+    var mmsi_s : str   = "---"
+    var sog_s  : str   = "--"
+    var lat_s  : str   = "----"
+    var lon_s  : str   = "-----"
+    var cog_s  : str   = "---"
+    if plen > 0:
+        mmsi_s = parts[0]
+    if plen > 1:
+        sog_s  = parts[1]
+    if plen > 2:
+        lat_s  = parts[2]
+    if plen > 3:
+        lon_s  = parts[3]
+    if plen > 4:
+        cog_s  = parts[4]
+    forge.gui.draw_text(mmsi_s, 802,  row_y, 11, 255,  90,  90, 255)
+    forge.gui.draw_text(sog_s,  918,  row_y, 11, 255, 140, 100, 255)
+    forge.gui.draw_text(lat_s,  966,  row_y, 11, 255,  90,  90, 255)
+    forge.gui.draw_text(lon_s,  1044, row_y, 11, 255,  90,  90, 255)
+    forge.gui.draw_text(cog_s,  1138, row_y, 11, 255, 170,  90, 255)
+
+proc draw_ais_panel() -> void:
+    var x : int = 798
+    var y : int = 285
+    var w : int = 370    # data area; 24 px on right reserved for scroll buttons
+    var h : int = 110
+
+    forge.gui.draw_text("AIS TARGETS", x, y - 18, 14, 255, 90, 90, 255)
+    forge.gui.draw_rect(x, y, w, h, 12, 20, 38, 255)
+    forge.gui.draw_rect_lines(x, y, w, h, 80, 30, 30, 255)
+
+    # Column headers
+    var hy : int = y + 5
+    forge.gui.draw_text("MMSI", 802,  hy, 11, 180, 80, 80, 255)
+    forge.gui.draw_text("SOG",  918,  hy, 11, 180, 80, 80, 255)
+    forge.gui.draw_text("LAT",  966,  hy, 11, 180, 80, 80, 255)
+    forge.gui.draw_text("LON",  1044, hy, 11, 180, 80, 80, 255)
+    forge.gui.draw_text("COG",  1138, hy, 11, 180, 80, 80, 255)
+    forge.gui.draw_line(x + 2, y + 20, x + w - 2, y + 20, 80, 30, 30, 255)
+
+    # 5 visible rows starting at g_ais_scroll
+    draw_ais_row(get_ais_slot(g_ais_scroll + 0), y + 27)
+    draw_ais_row(get_ais_slot(g_ais_scroll + 1), y + 43)
+    draw_ais_row(get_ais_slot(g_ais_scroll + 2), y + 59)
+    draw_ais_row(get_ais_slot(g_ais_scroll + 3), y + 75)
+    draw_ais_row(get_ais_slot(g_ais_scroll + 4), y + 91)
+
+    # Scroll buttons (right of data box)
+    var bx : int = x + w + 2
+    if forge.gui.button(bx, y, 22, 54, "^"):
+        if g_ais_scroll > 0:
+            g_ais_scroll = g_ais_scroll - 1
+    if forge.gui.button(bx, y + 56, 22, 54, "v"):
+        if g_ais_scroll < 5:
+            g_ais_scroll = g_ais_scroll + 1
+
+    # No-targets hint (shown in the gap between the list and radar panels)
+    if forge.str.len(g_ais_t0) < 3:
+        forge.gui.draw_text("No AIS targets received", x + 40, y + h + 8, 11, 80, 50, 50, 255)
+
+# ── AIS radar display ─────────────────────────────────────────────────────────
+
+# Plot one AIS target on the radar disc.
+# cx/cy = disc centre pixels; ppm = pixels per nautical mile.
+proc draw_radar_target(cx: int, cy: int, ppm: float, tgt: str) -> void:
+    if forge.str.len(tgt) < 3:
+        return
+    var parts : array = forge.str.split(tgt, "|")
+    if len(parts) < 4:
+        return
+    var tlat : float = forge.str.to_float(parts[2])
+    var tlon : float = forge.str.to_float(parts[3])
+    if tlat == 0.0:
+        return
+    # Equirectangular projection: convert lat/lon difference to nautical miles
+    var pi    : float = forge.math.PI()
+    var clat  : float = forge.math.cos(g_lat_f * pi / 180.0)
+    var dx_nm : float = (tlon - g_lon_f) * 60.0 * clat
+    var dy_nm : float = (tlat - g_lat_f) * 60.0
+    var dist  : float = forge.math.sqrt(dx_nm * dx_nm + dy_nm * dy_nm)
+    if dist > 1.5:
+        return
+    var px : int = cx + forge.math.to_int(dx_nm * ppm)
+    var py : int = cy - forge.math.to_int(dy_nm * ppm)
+    # Target symbol: filled dot + ring
+    forge.gui.draw_circle(px, py, 4.0, 255, 90, 90, 255)
+    forge.gui.draw_circle_lines(px, py, 6.0, 200, 60, 60, 255)
+    # MMSI label
+    forge.gui.draw_text(parts[0], px + 7, py - 5, 9, 255, 160, 80, 255)
+    # COG heading tick
+    if len(parts) > 4:
+        var cog_rad : float = forge.str.to_float(parts[4]) * pi / 180.0
+        var tx : int = px + forge.math.to_int(14.0 * forge.math.sin(cog_rad))
+        var ty : int = py - forge.math.to_int(14.0 * forge.math.cos(cog_rad))
+        forge.gui.draw_line(px, py, tx, ty, 255, 200, 60, 255)
+
+proc draw_ais_radar() -> void:
+    var x   : int   = 798
+    var y   : int   = 405
+    var w   : int   = 394
+    var h   : int   = 287
+
+    # Panel background and border
+    forge.gui.draw_rect(x + 2, y + 2, w - 4, h - 4, 6, 12, 20, 255)
+    forge.gui.draw_rect_lines(x + 2, y + 2, w - 4, h - 4, 80, 30, 30, 255)
+    forge.gui.draw_text("AIS RADAR", x + 12, y + 8, 13, 255, 90, 90, 255)
+
+    # Disc geometry: centre shifted 14 px below mid to give the title room
+    var cx    : int   = x + w / 2
+    var cy    : int   = y + h / 2 + 14
+    var max_r : float = 118.0            # pixels = 1.5 nm outer ring
+
+    var r05 : int = forge.math.to_int(max_r / 3.0)          # 0.5 nm
+    var r10 : int = forge.math.to_int(max_r * 2.0 / 3.0)    # 1.0 nm
+    var r15 : int = forge.math.to_int(max_r)                 # 1.5 nm
+
+    # Range rings
+    forge.gui.draw_circle_lines(cx, cy, float(r05), 25, 72, 28, 255)
+    forge.gui.draw_circle_lines(cx, cy, float(r10), 25, 72, 28, 255)
+    forge.gui.draw_circle_lines(cx, cy, float(r15), 32, 90, 35, 255)
+
+    # Range labels (right side of each ring)
+    forge.gui.draw_text("0.5",   cx + r05 + 2, cy - 6, 9, 40, 140, 55, 255)
+    forge.gui.draw_text("1.0",   cx + r10 + 2, cy - 6, 9, 40, 140, 55, 255)
+    forge.gui.draw_text("1.5nm", cx + r15 + 2, cy - 6, 9, 40, 140, 55, 255)
+
+    # Cross hairs
+    forge.gui.draw_line(cx, cy - r15, cx, cy + r15, 18, 52, 20, 255)
+    forge.gui.draw_line(cx - r15, cy, cx + r15, cy, 18, 52, 20, 255)
+
+    # Cardinal labels
+    forge.gui.draw_text("N", cx - 4,        cy - r15 - 12, 10, 60, 155, 80, 255)
+    forge.gui.draw_text("S", cx - 4,        cy + r15 + 3,  10, 60, 155, 80, 255)
+    forge.gui.draw_text("E", cx + r15 + 3,  cy - 5,        10, 60, 155, 80, 255)
+    forge.gui.draw_text("W", cx - r15 - 12, cy - 5,        10, 60, 155, 80, 255)
+
+    # Own-ship marker (green cross + dot)
+    forge.gui.draw_circle(cx, cy, 4.0, 0, 220, 120, 255)
+    forge.gui.draw_line(cx - 7, cy, cx + 7, cy, 0, 220, 120, 255)
+    forge.gui.draw_line(cx, cy - 7, cx, cy + 7, 0, 220, 120, 255)
+
+    # Plot AIS targets — only when own-ship position is known
+    if g_lat_f != 0.0:
+        var ppm : float = max_r / 1.5
+        draw_radar_target(cx, cy, ppm, g_ais_t0)
+        draw_radar_target(cx, cy, ppm, g_ais_t1)
+        draw_radar_target(cx, cy, ppm, g_ais_t2)
+        draw_radar_target(cx, cy, ppm, g_ais_t3)
+        draw_radar_target(cx, cy, ppm, g_ais_t4)
+        draw_radar_target(cx, cy, ppm, g_ais_t5)
+        draw_radar_target(cx, cy, ppm, g_ais_t6)
+        draw_radar_target(cx, cy, ppm, g_ais_t7)
+        draw_radar_target(cx, cy, ppm, g_ais_t8)
+        draw_radar_target(cx, cy, ppm, g_ais_t9)
+    else:
+        forge.gui.draw_text("Awaiting position fix", cx - 68, cy - 6, 11, 60, 100, 65, 255)
+
+# ── settings panel ────────────────────────────────────────────────────────────
+
+proc cfg_path() -> str:
+    var home : str = forge.sys.env("HOME")
+    if forge.str.len(home) == 0:
+        home = forge.sys.env("USERPROFILE")
+    if forge.str.len(home) > 0:
+        return home + "/.forge_instruments.cfg"
+    return "instruments.cfg"
+
+proc save_settings() -> void:
+    var cfg : str = "port="  + g_port_str                          + "\n"
+    cfg = cfg + "baud="      + forge.str.from_int(g_baud_idx)      + "\n"
+    cfg = cfg + "font_size=" + forge.str.from_int(g_font_size_idx) + "\n"
+    cfg = cfg + "log_size="  + forge.str.from_int(g_log_size_idx)  + "\n"
+    cfg = cfg + "font_path=" + g_font_path                         + "\n"
+    forge.io.write_file(cfg_path(), cfg)
+
+proc load_settings() -> void:
+    if forge.io.file_exists(cfg_path()) == false:
+        return
+    var raw   : str   = forge.io.read_file(cfg_path())
+    var lines : []str = forge.str.split(raw, "\n")
+    var i     : int   = 0
+    loop:
+        if i >= len(lines):
+            break
+        var line : str = forge.str.trim(lines[i])
+        var eq   : int = forge.str.find(line, "=")
+        if eq >= 0:
+            var key : str = forge.str.substr(line, 0, eq)
+            var val : str = forge.str.substr(line, eq + 1, forge.str.len(line) - eq - 1)
+            if key == "port":
+                g_port_str = val
+            elif key == "baud":
+                g_baud_idx = forge.str.to_int(val)
+            elif key == "font_size":
+                g_font_size_idx = forge.str.to_int(val)
+                apply_font_size()
+            elif key == "log_size":
+                g_log_size_idx = forge.str.to_int(val)
+                if g_log_size_idx == 0:
+                    g_log_font_size = 14
+                elif g_log_size_idx == 1:
+                    g_log_font_size = 18
+                elif g_log_size_idx == 2:
+                    g_log_font_size = 22
+                else:
+                    g_log_font_size = 26
+            elif key == "font_path":
+                g_font_path = val
+        i = i + 1
+
+proc draw_settings_panel() -> void:
+    forge.gui.draw_rect(150, 170, 900, 430, 5, 10, 22, 240)
+    forge.gui.draw_rect_lines(150, 170, 900, 430, 60, 110, 180, 255)
+    forge.gui.draw_text("SETTINGS", 170, 183, 15, 255, 210, 55, 255)
+
+    if forge.gui.button(990, 178, 50, 24, "X"):
+        save_settings()
+        g_settings_open = false
+
+    # ── Serial Port ───────────────────────────────────────────────────────────
+    forge.gui.draw_text("SERIAL PORT", 170, 213, 11, 160, 200, 240, 255)
+    forge.gui.draw_line(170, 226, 1040, 226, 45, 85, 148, 255)
+
+    forge.gui.draw_text("COM Port:", 170, 236, 12, 160, 200, 240, 255)
+    g_port_str = forge.gui.textbox(170, 250, 420, 28, g_port_str, 64)
+
+    forge.gui.draw_text("Baud Rate:", 620, 236, 12, 160, 200, 240, 255)
+    g_baud_idx = forge.gui.dropdown(620, 250, 180, 28, "4800;9600;38400;115200", g_baud_idx)
+
+    if g_connected:
+        if forge.gui.button(170, 295, 140, 34, "Disconnect"):
+            serial_reader.close()
+            g_connected = false
+            g_mode = "LIVE"
+            save_settings()
+    else:
+        if forge.gui.button(170, 295, 140, 34, "Connect"):
+            var baud : int = 4800
+            if g_baud_idx == 1:
+                baud = 9600
+            elif g_baud_idx == 2:
+                baud = 38400
+            elif g_baud_idx == 3:
+                baud = 115200
+            var ok : bool = serial_reader.open(g_port_str, baud)
+            if ok:
+                nmea_sim.stop()
+                g_connected = true
+                g_mode = "LIVE"
+                save_settings()
+
+    if g_connected:
+        forge.gui.draw_text("Connected: " + g_port_str, 330, 305, 12, 60, 210, 100, 255)
+    else:
+        forge.gui.draw_text("Not connected", 330, 305, 12, 200, 120, 60, 255)
+
+    # ── Display ───────────────────────────────────────────────────────────────
+    forge.gui.draw_line(170, 345, 1040, 345, 45, 85, 148, 255)
+    forge.gui.draw_text("DISPLAY", 170, 352, 11, 160, 200, 240, 255)
+    forge.gui.draw_line(170, 365, 1040, 365, 45, 85, 148, 255)
+
+    forge.gui.draw_text("Data Size:", 170, 375, 12, 160, 200, 240, 255)
+    var new_sz : int = forge.gui.dropdown(170, 390, 200, 28, "Small;Medium;Large;XLarge", g_font_size_idx)
+    if new_sz != g_font_size_idx:
+        g_font_size_idx = new_sz
+        apply_font_size()
+
+    forge.gui.draw_text("Log Text Size:", 400, 375, 12, 160, 200, 240, 255)
+    var new_log_sz : int = forge.gui.dropdown(400, 390, 200, 28, "Tiny;Small;Medium;Large", g_log_size_idx)
+    if new_log_sz != g_log_size_idx:
+        g_log_size_idx = new_log_sz
+        if g_log_size_idx == 0:
+            g_log_font_size = 9
+        elif g_log_size_idx == 1:
+            g_log_font_size = 11
+        elif g_log_size_idx == 2:
+            g_log_font_size = 13
+        else:
+            g_log_font_size = 16
+        forge.gui.log_create(0, 10, 284, 780, 466, 300, g_log_font_size)
+
+    forge.gui.draw_text("Font File (TTF/OTF):", 170, 432, 12, 160, 200, 240, 255)
+    g_font_path = forge.gui.textbox(170, 448, 596, 28, g_font_path, 255)
+
+    if forge.gui.button(774, 448, 70, 28, "Load"):
+        if forge.str.len(g_font_path) > 0:
+            if g_font_id >= 0:
+                forge.gui.unload_font(g_font_id)
+            g_font_id = forge.gui.load_font(g_font_path, 48)
+            if g_font_id >= 0:
+                forge.gui.set_font(g_font_id)
+                g_font_status = "OK"
+            else:
+                g_font_id = -1
+                g_font_status = "Error"
+
+    if forge.gui.button(852, 448, 90, 28, "Default"):
+        if g_font_id >= 0:
+            forge.gui.unload_font(g_font_id)
+            g_font_id = -1
+        forge.gui.set_font(-1)
+        g_font_path = ""
+        g_font_status = ""
+
+    if g_font_status == "OK":
+        forge.gui.draw_text("Font loaded OK", 170, 488, 12, 60, 210, 100, 255)
+    elif g_font_status == "Error":
+        forge.gui.draw_text("Error: could not load font file", 170, 488, 12, 220, 80, 80, 255)
+    else:
+        forge.gui.draw_text("Using default raylib font", 170, 488, 12, 120, 150, 180, 255)
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
+proc main() -> void:
+    forge.gui.init_window(1200, 800, "FORGE Instruments")
+    forge.gui.set_target_fps(30)
+    forge.gui.set_style_dark()
+
+    load_settings()
+
+    # NMEA log: left 780 px, occupies y=284..750
+    forge.gui.log_create(0, 10, 284, 780, 466, 300, g_log_font_size)
+
+    if forge.str.len(g_font_path) > 0:
+        g_font_id = forge.gui.load_font(g_font_path, 48)
+        if g_font_id >= 0:
+            forge.gui.set_font(g_font_id)
+            g_font_status = "OK"
+        else:
+            g_font_id = -1
+            g_font_status = "Error"
+
+    # CLI args: --port /dev/xxx  --baud N
+    var cli_args  : array = forge.sys.args()
+    var cli_count : int   = len(cli_args)
+    var ai        : int   = 0
+    loop:
+        if ai >= cli_count:
+            break
+        var arg : str = cli_args[ai]
+        if arg == "--port":
+            ai = ai + 1
+            if ai < cli_count:
+                g_port_str = cli_args[ai]
+        elif arg == "--baud":
+            ai = ai + 1
+            if ai < cli_count:
+                var bv : int = forge.str.to_int(cli_args[ai])
+                if bv == 9600:
+                    g_baud_idx = 1
+                elif bv == 38400:
+                    g_baud_idx = 2
+                elif bv == 115200:
+                    g_baud_idx = 3
+        ai = ai + 1
+
+    # Simulator does NOT auto-start — press the SIM button in the title bar.
+
+    loop:
+        if forge.gui.window_open() == false:
+            return
+
+        # Tick data sources
+        nmea_sim.tick()
+        serial_reader.tick()
+
+        # Smooth needle interpolation (lerp 8% toward target each frame)
+        g_hdg_disp      = g_hdg_disp      + (g_hdg_deg      - g_hdg_disp)      * 0.08
+        g_wind_ang_disp = g_wind_ang_disp + (g_wind_ang_deg - g_wind_ang_disp) * 0.08
+
+        forge.gui.begin_draw()
+        forge.gui.clear(8, 12, 22, 255)
+
+        # ── Title bar ─────────────────────────────────────────────────────────
+        forge.gui.draw_rect(0, 0, 1200, 50, 10, 18, 38, 255)
+        forge.gui.draw_text("FORGE INSTRUMENTS", 20, 14, 22, 255, 210, 55, 255)
+
+        # SIM / LIVE toggle button — colour-coded so mode is obvious at a glance
+        if g_mode == "SIM":
+            if forge.gui.color_button(840, 10, 110, 30, "SIM  > LIVE", 40, 110, 40, 255, 18, 55, 18, 255):
+                nmea_sim.stop()
+                g_mode = "LIVE"
+        else:
+            if forge.gui.color_button(840, 10, 110, 30, "LIVE > SIM", 140, 100, 30, 255, 75, 50, 12, 255):
+                nmea_sim.start()
+                g_mode = "SIM"
+
+        if forge.gui.button(960, 10, 90, 30, "Settings"):
+            g_settings_open = true
+
+        if g_paused:
+            forge.gui.draw_text("** PAUSED **", 1065, 16, 13, 255, 200, 40, 255)
+
+        forge.gui.draw_line(0, 50, 1200, 50, 38, 72, 130, 255)
+
+        # ── Instrument panels ─────────────────────────────────────────────────
+        draw_position_panel(0,   54, 300, 200)
+        draw_half_panel(300,  54, 200, 100, "SOG",   g_sog_str + " kts",  100, 230, 130)
+        draw_half_panel(300, 154, 200, 100, "COG",   g_cog_str + " M",    100, 230, 130)
+        draw_half_panel(500,  54, 200, 100, "DEPTH", g_depth_str + " m",   80, 210, 210)
+        draw_half_panel(500, 154, 200, 100, "TEMP",  g_temp_str + " C",   255, 140,  80)
+        draw_wind_rose(700, 54, 200, 200)
+        draw_compass(900, 54, 300, 200)
+
+        # ── NMEA log + right column ───────────────────────────────────────────
+        forge.gui.draw_line(0, 258, 1200, 258, 38, 72, 130, 255)
+        forge.gui.draw_text("NMEA LOG", 16, 260, 20, 70, 110, 165, 255)
+        forge.gui.log_draw(0)
+
+        draw_ais_panel()
+        draw_ais_radar()
+
+        # ── Control buttons (below radar, above status bar) ───────────────────
+        if g_paused:
+            if forge.gui.color_button(800, 700, 95, 28, "RESUME", 60, 80, 160, 255, 30, 40, 100, 255):
+                g_paused = false
+        else:
+            if forge.gui.color_button(800, 700, 95, 28, "PAUSE", 60, 80, 160, 255, 30, 40, 100, 255):
+                g_paused = true
+
+        if forge.gui.color_button(905, 700, 100, 28, "CLEAR DATA", 160, 55, 55, 255, 90, 25, 25, 255):
+            clear_all_data()
+
+        # ── Status bar ────────────────────────────────────────────────────────
+        forge.gui.draw_line(0, 750, 1200, 750, 38, 72, 130, 255)
+        forge.gui.draw_rect(0, 750, 1200, 50, 10, 18, 38, 255)
+        if g_mode == "LIVE":
+            if g_connected:
+                forge.gui.draw_text("LIVE  |  " + g_port_str + "  |  4800 baud", 20, 763, 12, 60, 210, 100, 255)
+            else:
+                forge.gui.draw_text("LIVE  |  No serial connection  |  Press Settings to connect", 20, 763, 18, 80, 125, 175, 255)
+        else:
+            forge.gui.draw_text("SIM MODE  |  Simulated NMEA data active", 20, 763, 18, 60, 200, 80, 255)
+
+        # Settings overlay (always drawn last — sits on top of everything)
+        if g_settings_open:
+            draw_settings_panel()
+
+        forge.gui.end_draw()

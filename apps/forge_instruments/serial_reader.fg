@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# serial_reader.fg — Live Serial Port Reader
+#
+# Responsibilities
+#   • Open a serial port at a configurable path and baud rate
+#   • Read NMEA sentences non-blocking, byte-by-byte, via tick()
+#   • Emit each complete line on nmea_raw_sentence
+#   • Provide open(), close(), is_open(), tick() procs for main() to drive
+# ─────────────────────────────────────────────────────────────────────────────
+
+import forge.serial
+import forge.str
+
+# ─────────────────────────────────────────────────────────────────────────────
+# State
+# ─────────────────────────────────────────────────────────────────────────────
+
+var port_handle : int  = -1     # forge.serial handle; -1 = closed
+var port_path   : str  = ""
+var port_baud   : int  = 4800
+var port_open   : bool = false
+var line_buf    : str  = ""     # accumulates bytes until newline
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public API
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc open(path: str, baud: int) -> bool:
+    if port_open:
+        return false
+
+    port_path   = path
+    port_baud   = baud
+    line_buf    = ""
+
+    port_handle = forge.serial.open(path, baud)
+    if port_handle < 0:
+        return false
+
+    port_open = true
+    return true
+
+proc close() -> void:
+    if port_open == false:
+        return
+    forge.serial.close(port_handle)
+    port_handle = -1
+    port_open   = false
+    line_buf    = ""
+
+proc is_open() -> bool:
+    return port_open
+
+# Call once per render frame.
+# Uses non-blocking read_byte so the GUI never stalls waiting for data.
+# Accumulates bytes into line_buf; emits on nmea_raw_sentence when '\n' (10)
+# arrives.  Reads up to 128 bytes per frame so a burst doesn't starve the UI.
+proc tick() -> void:
+    if port_open == false:
+        return
+
+    var max_bytes : int = 128
+    var read_cnt  : int = 0
+    loop:
+        if read_cnt >= max_bytes:
+            return
+        var b : int = forge.serial.read_byte(port_handle)
+        if b < 0:
+            return          # no more data available right now
+        read_cnt = read_cnt + 1
+        if b == 10:         # '\n'
+            var trimmed : str = forge.str.trim(line_buf)
+            if forge.str.len(trimmed) > 1:
+                emit nmea_raw_sentence -> trimmed
+            line_buf = ""
+        elif b == 13:
+            return          # skip '\r'
+        else:
+            line_buf = line_buf + forge.str.from_char(b)

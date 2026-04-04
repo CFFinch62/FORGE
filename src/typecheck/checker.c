@@ -1145,6 +1145,15 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                             /* Returns []str - dynamic array of strings */
                             forge_type_t* elem = type_prim(checker->arena, TY_STR);
                             result = type_dyn_array(checker->arena, elem);
+                        } else if (strcmp(stdlib_func, "char_at") == 0 ||
+                                   strcmp(stdlib_func, "to_int") == 0) {
+                            /* Returns int (numeric ASCII/byte value or parsed int) */
+                            result = type_prim(checker->arena, TY_INT);
+                        } else if (strcmp(stdlib_func, "from_int") == 0 ||
+                                   strcmp(stdlib_func, "from_float") == 0 ||
+                                   strcmp(stdlib_func, "from_char") == 0) {
+                            /* Numeric-to-string conversions */
+                            result = type_prim(checker->arena, TY_STR);
                         } else {
                             /* Most string functions return str */
                             result = type_prim(checker->arena, TY_STR);

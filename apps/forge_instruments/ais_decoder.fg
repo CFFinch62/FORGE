@@ -1,0 +1,146 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ais_decoder.fg — AIS Payload Decoder
+#
+# Responsibilities
+#   • Accept a 6-bit ASCII encoded AIS payload string from nmea_parser
+#   • Decode 6-bit characters to integer values
+#   • Extract bit fields using bitwise operations
+#   • Handle message types 1/2/3 (Class A position), 18 (Class B position),
+#     5 (Class A static), 24 (Class B static)
+#   • Build an AIS target string and emit on ais_target_update
+#
+# AIS 6-bit ASCII encoding:
+#   Each character encodes 6 bits.
+#   char_value = ASCII - 48; if char_value > 39 then char_value -= 8
+#   Bits are packed MSB-first within each 6-bit group.
+#
+# Reference: ITU-R M.1371-5  (AIS VHF Data-link message structure)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import forge.str
+import forge.math
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6-bit ASCII decoding
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Decode one 6-bit ASCII character to its integer value (0–63)
+proc decode_char(c: int) -> int:
+    var v: int = c - 48
+    if v > 39:
+        v = v - 8
+    return v & 63
+
+# Extract bit_len bits starting at bit position bit_pos from a payload string.
+# Bits are numbered from the MSB of the first character (bit 0 = MSB of char 0).
+proc get_bits(payload: str, bit_pos: int, bit_len: int) -> int:
+    var result : int = 0
+    var i      : int = 0
+    loop:
+        if i >= bit_len:
+            return result
+        var char_idx : int = (bit_pos + i) / 6
+        var bit_idx  : int = 5 - ((bit_pos + i) % 6)
+        var c        : int = forge.str.char_at(payload, char_idx)
+        var v        : int = decode_char(c)
+        result = (result << 1) | ((v >> bit_idx) & 1)
+        i = i + 1
+    return result
+
+# Sign-extend a value that is bit_len bits wide
+proc sign_extend(value: int, bit_len: int) -> int:
+    var sign_bit: int = 1 << (bit_len - 1)
+    if (value & sign_bit) != 0:
+        return value - (sign_bit << 1)
+    return value
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AIS field extractors
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Message type: bits 0–5
+proc msg_type(payload: str) -> int:
+    return get_bits(payload, 0, 6)
+
+# MMSI: bits 8–37 (30 bits)
+proc mmsi(payload: str) -> int:
+    return get_bits(payload, 8, 30)
+
+# SOG (speed over ground) × 10 knots: bits 50–59 (10 bits), type 1/2/3
+proc sog_raw(payload: str) -> int:
+    return get_bits(payload, 50, 10)
+
+# Latitude × 10^4 minutes (signed, 27 bits): bits 89–115, type 1/2/3
+proc lat_raw(payload: str) -> int:
+    return sign_extend(get_bits(payload, 89, 27), 27)
+
+# Longitude × 10^4 minutes (signed, 28 bits): bits 61–88, type 1/2/3
+proc lon_raw(payload: str) -> int:
+    return sign_extend(get_bits(payload, 61, 28), 28)
+
+# COG × 10 degrees: bits 116–127 (12 bits), type 1/2/3
+proc cog_raw(payload: str) -> int:
+    return get_bits(payload, 116, 12)
+
+# True heading degrees: bits 128–136 (9 bits), type 1/2/3
+proc true_heading(payload: str) -> int:
+    return get_bits(payload, 128, 9)
+
+# Navigation status: bits 38–41 (4 bits), type 1/2/3
+proc nav_status(payload: str) -> int:
+    return get_bits(payload, 38, 4)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public entry point called by nmea_parser
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc decode(payload: str) -> void:
+    if forge.str.len(payload) < 1:
+        return
+
+    var mtype: int = msg_type(payload)
+
+    if mtype == 1 or mtype == 2 or mtype == 3:
+        decode_position(payload)
+    elif mtype == 18:
+        decode_class_b(payload)
+
+proc decode_position(payload: str) -> void:
+    var m        : int   = mmsi(payload)
+    var sog      : int   = sog_raw(payload)
+    var lat      : int   = lat_raw(payload)
+    var lon      : int   = lon_raw(payload)
+    var cog      : int   = cog_raw(payload)
+    var hdg      : int   = true_heading(payload)
+    var stat     : int   = nav_status(payload)
+    # Convert raw AIS units → human-readable floats
+    # SOG: raw is in 1/10 knots
+    var sog_f    : float = float(sog) / 10.0
+    # LAT/LON: raw is in 1/10000 minutes → divide by 600000 for decimal degrees
+    var lat_f    : float = float(lat) / 600000.0
+    var lon_f    : float = float(lon) / 600000.0
+    # COG: raw is in 1/10 degrees
+    var cog_f    : float = float(cog) / 10.0
+    var summary  : str   = forge.str.from_int(m)
+    summary = summary + "|" + forge.str.from_float(sog_f, 1)
+    summary = summary + "|" + forge.str.from_float(lat_f, 4)
+    summary = summary + "|" + forge.str.from_float(lon_f, 4)
+    summary = summary + "|" + forge.str.from_float(cog_f, 1)
+    summary = summary + "|" + forge.str.from_int(hdg)
+    summary = summary + "|" + forge.str.from_int(stat)
+    emit ais_target_update -> summary
+
+proc decode_class_b(payload: str) -> void:
+    var m        : int   = mmsi(payload)
+    var sog      : int   = get_bits(payload, 46, 10)
+    var lat      : int   = get_bits(payload, 57, 27)
+    var lon      : int   = get_bits(payload, 85, 28)
+    var sog_f    : float = float(sog) / 10.0
+    var lat_f    : float = float(sign_extend(lat, 27)) / 600000.0
+    var lon_f    : float = float(sign_extend(lon, 28)) / 600000.0
+    var summary  : str   = forge.str.from_int(m)
+    summary = summary + "|" + forge.str.from_float(sog_f, 1)
+    summary = summary + "|" + forge.str.from_float(lat_f, 4)
+    summary = summary + "|" + forge.str.from_float(lon_f, 4)
+    summary = summary + "|0.0|511|15"
+    emit ais_target_update -> summary
