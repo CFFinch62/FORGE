@@ -1,0 +1,29 @@
+# Beginner example: Memory management concepts using current FORGE features
+
+import forge.buf
+
+proc show_local_values() -> void:
+    var retry_limit: int = 3
+    var label: str = "packet"
+
+    print(label + " retry limit: " + str(retry_limit))
+    print("These local values exist only while show_local_values is running.")
+
+proc use_heap_buffer() -> void:
+    var buf: int = forge.buf.create(32)
+
+    if buf < 0:
+        print("Could not create buffer")
+    else:
+        forge.buf.write_str(buf, "FORGE")
+        forge.buf.rewind(buf)
+
+        var text: str = forge.buf.to_str(buf)
+        print("Buffer text: " + text)
+
+        forge.buf.free_buf(buf)
+        print("Buffer released with forge.buf.free_buf")
+
+proc main() -> void:
+    show_local_values()
+    use_heap_buffer()

@@ -1279,7 +1279,8 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                                    strcmp(stdlib_func, "measure_text") == 0 ||
                                    strcmp(stdlib_func, "checkbox") == 0 ||
                                    strcmp(stdlib_func, "dropdown") == 0 ||
-                                   strcmp(stdlib_func, "log_count") == 0) {
+                                   strcmp(stdlib_func, "log_count") == 0 ||
+                                   strcmp(stdlib_func, "load_font") == 0) {
                             result = type_prim(checker->arena, TY_INT);
                         } else if (strcmp(stdlib_func, "get_dt") == 0 ||
                                    strcmp(stdlib_func, "slider") == 0) {
@@ -1292,7 +1293,8 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                                draw_line, draw_rect, draw_rect_lines,
                                draw_circle, draw_circle_lines, draw_text,
                                label, set_style_dark, set_style_light,
-                               log_create, log_add, log_clear, log_draw -> void */
+                               log_create, log_add, log_clear, log_draw,
+                               set_font, unload_font -> void */
                             result = type_prim(checker->arena, TY_VOID);
                         }
                     } else {

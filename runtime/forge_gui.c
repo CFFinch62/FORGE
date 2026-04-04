@@ -51,6 +51,94 @@ static void str_cstr_free(const char* ptr, forge_str_t s, const char* buf) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * Font Slot System
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+#define MAX_FONTS 8
+
+static Font   g_font_slots[MAX_FONTS];
+static int    g_font_loaded[MAX_FONTS];  /* 1 if slot holds a valid font */
+static int    g_active_font_id = -1;     /* -1 = raylib default */
+
+/* Internal: get active Font for text drawing */
+static int g_font_system_ready = 0;
+
+static Font active_font(void) {
+    if (g_active_font_id >= 0 && g_active_font_id < MAX_FONTS &&
+        g_font_loaded[g_active_font_id]) {
+        return g_font_slots[g_active_font_id];
+    }
+    return GetFontDefault();
+}
+
+static int using_custom_font(void) {
+    return g_font_system_ready &&
+           g_active_font_id >= 0 &&
+           g_active_font_id < MAX_FONTS &&
+           g_font_loaded[g_active_font_id];
+}
+
+/* Internal text helpers that respect the active font */
+static void draw_text_ex(const char* t, int x, int y, int size, Color c) {
+    if (using_custom_font()) {
+        DrawTextEx(active_font(), t, (Vector2){(float)x, (float)y},
+                   (float)size, 1.0f, c);
+    } else {
+        DrawText(t, x, y, size, c);
+    }
+}
+
+static int measure_text_ex(const char* t, int size) {
+    if (using_custom_font()) {
+        Vector2 v = MeasureTextEx(active_font(), t, (float)size, 1.0f);
+        return (int)v.x;
+    }
+    return MeasureText(t, size);
+}
+
+int64_t forge_gui_load_font(forge_str_t path, int64_t size) {
+    /* Find a free slot */
+    int slot = -1;
+    for (int i = 0; i < MAX_FONTS; i++) {
+        if (!g_font_loaded[i]) { slot = i; break; }
+    }
+    if (slot < 0) {
+        fprintf(stderr, "FORGE: forge_gui_load_font: no free font slots (max %d)\n", MAX_FONTS);
+        return -1;
+    }
+
+    char buf[512];
+    const char* p = str_cstr(path, buf, sizeof(buf));
+    int fs = (size > 0) ? (int)size : 32;
+    Font f = LoadFontEx(p, fs, NULL, 0);
+    str_cstr_free(p, path, buf);
+
+    if (!IsFontValid(f)) {
+        fprintf(stderr, "FORGE: forge_gui_load_font: failed to load '%s'\n", p);
+        return -1;
+    }
+
+    g_font_slots[slot] = f;
+    g_font_loaded[slot] = 1;
+    g_font_system_ready = 1;
+    return (int64_t)slot;
+}
+
+void forge_gui_set_font(int64_t id) {
+    g_active_font_id = (int)id;
+    g_font_system_ready = 1;
+}
+
+void forge_gui_unload_font(int64_t id) {
+    if (id < 0 || id >= MAX_FONTS || !g_font_loaded[(int)id]) return;
+    UnloadFont(g_font_slots[(int)id]);
+    g_font_loaded[(int)id] = 0;
+    if (g_active_font_id == (int)id) {
+        g_active_font_id = -1;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * Textbox State Management
  * ═══════════════════════════════════════════════════════════════════════════
  *
@@ -182,14 +270,14 @@ void forge_gui_draw_text(forge_str_t text, int64_t x, int64_t y,
                          int64_t size, int64_t r, int64_t g, int64_t b, int64_t a) {
     char buf[1024];
     const char* t = str_cstr(text, buf, sizeof(buf));
-    DrawText(t, (int)x, (int)y, (int)size, rgba(r, g, b, a));
+    draw_text_ex(t, (int)x, (int)y, (int)size, rgba(r, g, b, a));
     str_cstr_free(t, text, buf);
 }
 
 int64_t forge_gui_measure_text(forge_str_t text, int64_t size) {
     char buf[1024];
     const char* t = str_cstr(text, buf, sizeof(buf));
-    int result = MeasureText(t, (int)size);
+    int result = measure_text_ex(t, (int)size);
     str_cstr_free(t, text, buf);
     return (int64_t)result;
 }
@@ -312,6 +400,20 @@ void forge_gui_set_style_dark(void) {
 
 void forge_gui_set_style_light(void) {
     GuiLoadStyleDefault();
+    /* Explicitly apply light theme values, symmetric with set_style_dark.
+     * GuiLoadStyleDefault() already sets these, but spelling them out here
+     * makes the function self-contained and robust against future raygui
+     * default-value changes. */
+    GuiSetStyle(DEFAULT, BACKGROUND_COLOR,   0xf5f5f5ff);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL,  0x686868ff);
+    GuiSetStyle(DEFAULT, BASE_COLOR_NORMAL,  0xc9c9c9ff);
+    GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL,0x838383ff);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_FOCUSED, 0x6c9bbcff);
+    GuiSetStyle(DEFAULT, BASE_COLOR_FOCUSED, 0xc9effeff);
+    GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED,0x5bb2d9ff);
+    GuiSetStyle(DEFAULT, TEXT_COLOR_PRESSED, 0x368bafff);
+    GuiSetStyle(DEFAULT, BASE_COLOR_PRESSED, 0x97e8ffff);
+    GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED,0x0492c7ff);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -435,7 +537,7 @@ void forge_gui_log_draw(int64_t id) {
         forge_log_line_t* line = &lp->lines[ring_idx];
 
         int draw_y = (int)lp->y + 2 + i * line_height;
-        DrawText(line->text, (int)lp->x + 4, draw_y, fs, line->color);
+        draw_text_ex(line->text, (int)lp->x + 4, draw_y, fs, line->color);
     }
 
     EndScissorMode();
@@ -542,10 +644,10 @@ int forge_gui_color_button(int64_t x, int64_t y, int64_t w, int64_t h,
     /* Draw centered text */
     char buf[256];
     const char* t = str_cstr(text, buf, sizeof(buf));
-    int tw = MeasureText(t, 16);
+    int tw = measure_text_ex(t, 16);
     int tx_x = (int)x + ((int)w - tw) / 2;
     int tx_y = (int)y + ((int)h - 16) / 2;
-    DrawText(t, tx_x, tx_y, 16, tx);
+    draw_text_ex(t, tx_x, tx_y, 16, tx);
     str_cstr_free(t, text, buf);
 
     return clicked ? 1 : 0;
@@ -600,6 +702,10 @@ forge_str_t forge_gui_textbox(int64_t x,int64_t y,int64_t w,int64_t h,forge_str_
 
 void forge_gui_set_style_dark(void) { gui_not_available(); }
 void forge_gui_set_style_light(void) { gui_not_available(); }
+
+int64_t forge_gui_load_font(forge_str_t path, int64_t size) { (void)path; (void)size; gui_not_available(); return -1; }
+void forge_gui_set_font(int64_t id) { (void)id; gui_not_available(); }
+void forge_gui_unload_font(int64_t id) { (void)id; gui_not_available(); }
 
 /* New widget stubs */
 void forge_gui_log_create(int64_t id,int64_t x,int64_t y,int64_t w,int64_t h,int64_t ml,int64_t fs) { (void)id;(void)x;(void)y;(void)w;(void)h;(void)ml;(void)fs; gui_not_available(); }

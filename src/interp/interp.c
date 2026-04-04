@@ -3742,6 +3742,32 @@ static int try_stdlib_gui(forge_interp_t* interp, const char* proc_name,
         return 1;
     }
 
+    /* === Font Management === */
+    if (strcmp(proc_name, "load_font") == 0) {
+        if (arg_count >= 2 && args[0].kind == VAL_STR) {
+            forge_str_t path = interp_str_to_runtime(&args[0]);
+            int64_t size = (args[1].kind == VAL_INT) ? args[1].as.i : 32;
+            *result = val_int(forge_gui_load_font(path, size));
+        } else {
+            *result = val_int(-1);
+        }
+        return 1;
+    }
+    if (strcmp(proc_name, "set_font") == 0) {
+        if (arg_count >= 1 && args[0].kind == VAL_INT) {
+            forge_gui_set_font(args[0].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+    if (strcmp(proc_name, "unload_font") == 0) {
+        if (arg_count >= 1 && args[0].kind == VAL_INT) {
+            forge_gui_unload_font(args[0].as.i);
+        }
+        *result = val_void();
+        return 1;
+    }
+
     /* === Input — Keyboard === */
     if (strcmp(proc_name, "is_key_pressed") == 0) {
         if (arg_count >= 1) {

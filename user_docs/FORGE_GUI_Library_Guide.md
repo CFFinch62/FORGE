@@ -17,13 +17,14 @@
 3. [The Render Loop](#3-the-render-loop)
 4. [Drawing Shapes](#4-drawing-shapes)
 5. [Drawing Text](#5-drawing-text)
-6. [Handling Input](#6-handling-input)
-7. [Widgets](#7-widgets)
-8. [Scrollable Text Log](#8-scrollable-text-log)
-9. [Color Constants](#9-color-constants)
-10. [Complete API Reference](#10-complete-api-reference)
-11. [Example: Hello GUI](#11-example-hello-gui)
-12. [Example: NMEA Terminal](#12-example-nmea-terminal)
+6. [Custom Fonts](#6-custom-fonts)
+7. [Handling Input](#7-handling-input)
+8. [Widgets](#8-widgets)
+9. [Scrollable Text Log](#9-scrollable-text-log)
+10. [Color Constants](#10-color-constants)
+11. [Complete API Reference](#11-complete-api-reference)
+12. [Example: Hello GUI](#12-example-hello-gui)
+13. [Example: NMEA Terminal](#13-example-nmea-terminal)
 
 ---
 
@@ -174,9 +175,92 @@ var centered_x: int = (800 - width) / 2
 gui.draw_text("Hello", centered_x, 300, 20, 255, 255, 255, 255)
 ```
 
+By default, FORGE uses raylib's built-in bitmap font. To use a nicer font,
+see [Section 6 — Custom Fonts](#6-custom-fonts).
+
 ---
 
-## 6. Handling Input
+## 6. Custom Fonts
+
+FORGE's GUI layer defaults to raylib's built-in bitmap font, which is
+functional but coarse. You can load any TrueType (`.ttf`) or OpenType
+(`.otf`) font from disk and make it the active font for **all** text
+rendering — `draw_text`, `measure_text`, the scrollable log panels, and
+color buttons — without changing any of your existing draw calls.
+
+### Loading and activating a font
+
+Call `gui.load_font` **after** `gui.init_window` and **before** the render
+loop. It returns a slot id (0–7) that you pass to `gui.set_font`:
+
+```forge
+gui.init_window(900, 650, "My App")
+gui.set_target_fps(60)
+
+var font_id: int = gui.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 20)
+if font_id >= 0:
+    gui.set_font(font_id)
+```
+
+The `size` parameter (here `20`) sets the base rendering resolution of the
+font. Load at roughly the pixel size you plan to draw at for the sharpest
+results. From that point on every text call uses the loaded font
+automatically — no extra parameters needed.
+
+### Reverting to the default font
+
+Pass `-1` to `gui.set_font` at any time to go back to the raylib bitmap
+font:
+
+```forge
+gui.set_font(-1)   # revert to built-in default
+```
+
+### Unloading a font
+
+When you no longer need a font (typically at shutdown), free its GPU memory
+with `gui.unload_font`. If the unloaded font was active, rendering reverts
+to the default automatically.
+
+```forge
+# --- after the render loop ---
+if font_id >= 0:
+    gui.unload_font(font_id)
+gui.close_window()
+```
+
+### Font slots
+
+Up to **8** fonts can be loaded simultaneously (slot ids 0–7). Each call to
+`gui.load_font` finds the next free slot; you can hold references to
+multiple fonts and switch between them with `gui.set_font`.
+
+### Recommended fonts (Linux)
+
+These are available on most distributions:
+
+| Font file | Style |
+|-----------|-------|
+| `/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf` | Crisp monospace, widely installed |
+| `/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf` | Metric-compatible with Courier New |
+| `/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf` | Ubuntu's monospace (`fonts-ubuntu` package) |
+
+Install Ubuntu fonts if needed:
+```bash
+sudo apt install fonts-ubuntu
+```
+
+### API summary
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `gui.load_font(path, size)` | int | Load a TTF/OTF file. Returns slot id (0–7) or -1 on failure. |
+| `gui.set_font(id)` | void | Activate a loaded font. Pass -1 to revert to default. |
+| `gui.unload_font(id)` | void | Free a font slot and its GPU memory. |
+
+---
+
+## 7. Handling Input
 
 ### Keyboard
 
@@ -222,7 +306,7 @@ if gui.is_mouse_down(0):       # held down
 
 ---
 
-## 7. Widgets
+## 8. Widgets
 
 Widgets are interactive GUI elements. They are drawn AND checked in a single
 call — this is called **immediate-mode GUI**.
@@ -299,7 +383,7 @@ is the index of the selected item (0-based).
 
 ---
 
-## 8. Scrollable Text Log
+## 9. Scrollable Text Log
 
 The **log widget** is a scrollable, colored text display — perfect for
 terminal output, chat messages, or data feeds.
@@ -347,7 +431,7 @@ var n: int = gui.log_count(0)       # Get number of lines
 
 ---
 
-## 9. Color Constants
+## 10. Color Constants
 
 FORGE GUI uses RGBA values (0–255). Here are useful presets:
 
@@ -368,7 +452,7 @@ FORGE GUI uses RGBA values (0–255). Here are useful presets:
 
 ---
 
-## 10. Complete API Reference
+## 11. Complete API Reference
 
 ### Window Management
 
@@ -405,6 +489,14 @@ FORGE GUI uses RGBA values (0–255). Here are useful presets:
 |----------|---------|-------------|
 | `gui.draw_text(text, x, y, size, r, g, b, a)` | void | Draw text |
 | `gui.measure_text(text, size)` | int | Get text width in pixels |
+
+### Font Management
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `gui.load_font(path, size)` | int | Load a TTF/OTF font. Returns slot id (0–7) or -1 on failure. Call after `init_window`. |
+| `gui.set_font(id)` | void | Activate a loaded font for all text rendering. Pass -1 to revert to default. |
+| `gui.unload_font(id)` | void | Free a font slot and its GPU memory. |
 
 ### Input — Keyboard
 
@@ -455,7 +547,7 @@ FORGE GUI uses RGBA values (0–255). Here are useful presets:
 
 ---
 
-## 11. Example: Hello GUI
+## 12. Example: Hello GUI
 
 A minimal program demonstrating a window, text, shapes, and a button:
 
@@ -494,7 +586,7 @@ proc main() -> void:
 
 ---
 
-## 12. Example: NMEA Terminal
+## 13. Example: NMEA Terminal
 
 See `examples/nmea_terminal.fg` for a complete, working NMEA 0183 serial
 terminal built entirely in FORGE. It demonstrates:
@@ -505,6 +597,7 @@ terminal built entirely in FORGE. It demonstrates:
 - Toggle buttons, dropdown, textbox
 - TX/RX activity indicators
 - Status bar layout
+- Custom font loading (DejaVu Sans Mono via `gui.load_font`)
 
 Run it with:
 

@@ -143,6 +143,24 @@ void forge_gui_set_style_dark(void);
 void forge_gui_set_style_light(void);
 
 /* ═══════════════════════════════════════════════════════════════════════════
+ * Font Management
+ *
+ * Load a TTF/OTF font file into a slot (0–7). Call after init_window().
+ * The size parameter sets the base render quality (20–48 recommended).
+ * Returns the slot id on success, or -1 on failure.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Load a font from a file path. size=0 uses 32 as default. Returns slot id (0-7) or -1. */
+int64_t forge_gui_load_font(forge_str_t path, int64_t size);
+
+/* Set the active font used by draw_text, measure_text, log panels, and color_button.
+ * Pass id=-1 to revert to the raylib default font. */
+void forge_gui_set_font(int64_t id);
+
+/* Unload a font slot and free GPU memory. Reverts to default if it was active. */
+void forge_gui_unload_font(int64_t id);
+
+/* ═══════════════════════════════════════════════════════════════════════════
  * Scrollable Text Log
  *
  * A ring-buffer backed scrollable text display with per-line RGBA colors.
