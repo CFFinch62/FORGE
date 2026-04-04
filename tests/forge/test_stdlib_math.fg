@@ -1,0 +1,85 @@
+# Test forge.math standard library module
+
+import forge.io
+import forge.math
+
+proc main() -> void:
+    forge.io.print("=== Testing forge.math module ===")
+
+    # Test constants
+    forge.io.print("-- Constants --")
+    print(forge.math.PI)
+    print(forge.math.E)
+    print(forge.math.TAU)
+
+    # Test abs
+    forge.io.print("-- abs --")
+    print(forge.math.abs(-5.5))
+    print(forge.math.abs(3.14))
+    print(forge.math.abs_int(-42))
+    print(forge.math.abs_int(17))
+
+    # Test min/max
+    forge.io.print("-- min/max --")
+    print(forge.math.min(3.0, 7.0))
+    print(forge.math.max(3.0, 7.0))
+    print(forge.math.min_int(3, 7))
+    print(forge.math.max_int(3, 7))
+
+    # Test clamp
+    forge.io.print("-- clamp --")
+    print(forge.math.clamp(5.0, 0.0, 10.0))
+    print(forge.math.clamp(-5.0, 0.0, 10.0))
+    print(forge.math.clamp(15.0, 0.0, 10.0))
+
+    # Test pow/sqrt/cbrt
+    forge.io.print("-- pow/sqrt/cbrt --")
+    print(forge.math.pow(2.0, 3.0))
+    print(forge.math.sqrt(16.0))
+    print(forge.math.cbrt(27.0))
+
+    # Test rounding
+    forge.io.print("-- rounding --")
+    print(forge.math.floor(3.7))
+    print(forge.math.ceil(3.2))
+    print(forge.math.round(3.5))
+    print(forge.math.trunc(-3.7))
+
+    # Test trig (use known values)
+    forge.io.print("-- trig --")
+    # sin(0) = 0, cos(0) = 1
+    print(forge.math.sin(0.0))
+    print(forge.math.cos(0.0))
+    # tan(0) = 0
+    print(forge.math.tan(0.0))
+    # atan2(1, 1) = PI/4 = 0.785...
+    print(forge.math.atan2(1.0, 1.0))
+
+    # Test logarithms
+    forge.io.print("-- log/exp --")
+    # log(e) = 1
+    print(forge.math.log(forge.math.E))
+    # log10(100) = 2
+    print(forge.math.log10(100.0))
+    # log2(8) = 3
+    print(forge.math.log2(8.0))
+    # exp(0) = 1
+    print(forge.math.exp(0.0))
+
+    # Test random (with seed for reproducibility)
+    forge.io.print("-- random --")
+    forge.math.seed_random(42)
+    var r1: int = forge.math.random_int(0, 100)
+    var r2: int = forge.math.random_int(0, 100)
+    # Just check they're in range (exact values depend on rand() implementation)
+    print(r1 >= 0)
+    print(r1 < 100)
+    print(r2 >= 0)
+    print(r2 < 100)
+    # random_float should be in [0, 1)
+    var rf: float = forge.math.random_float()
+    print(rf >= 0.0)
+    print(rf < 1.0)
+
+    forge.io.print("=== Done ===")
+

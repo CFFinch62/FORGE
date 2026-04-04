@@ -1,0 +1,9 @@
+=== Testing forge.sys module ===
+Platform: linux
+Arch: x86_64
+Platform valid: PASS
+Arch valid: PASS
+HOME env: PASS
+Nonexistent env: PASS
+Args count: 0
+=== All forge.sys tests completed ===

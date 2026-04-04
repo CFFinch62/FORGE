@@ -1,0 +1,29 @@
+# Test arithmetic operations
+
+proc main() -> void:
+    # Basic arithmetic
+    var a: int = 10
+    var b: int = 3
+
+    print(a + b)       # 13
+    print(a - b)       # 7
+    print(a * b)       # 30
+    print(a / b)       # 3 (integer division)
+    print(a % b)       # 1 (modulo)
+
+    # Negative numbers
+    var neg: int = -5
+    print(neg)         # -5
+    print(-neg)        # 5
+    print(neg + 10)    # 5
+
+    # Operator precedence
+    print(2 + 3 * 4)   # 14 (not 20)
+    print((2 + 3) * 4) # 20
+    print(10 - 4 - 2)  # 4 (left-to-right)
+    print(100 / 10 / 2) # 5 (left-to-right)
+
+    # Large numbers
+    var big: int = 1000000000000
+    print(big * 2)     # 2000000000000
+

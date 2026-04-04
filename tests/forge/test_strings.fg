@@ -1,0 +1,40 @@
+# Test string operations
+
+proc main() -> void:
+    # String concatenation
+    var hello: str = "Hello"
+    var world: str = "World"
+    var greeting: str = hello + ", " + world + "!"
+    print(greeting)    # Hello, World!
+
+    # String length
+    print(len(hello))   # 5
+    print(len(world))   # 5
+    print(len(greeting)) # 13
+    print(len(""))      # 0
+
+    # Empty string
+    var empty: str = ""
+    print(len(empty))   # 0
+
+    # Escape sequences
+    var escaped: str = "Line1\nLine2"
+    print(escaped)
+
+    var tabbed: str = "Col1\tCol2"
+    print(tabbed)
+
+    # String comparison
+    var s1: str = "abc"
+    var s2: str = "abc"
+    var s3: str = "xyz"
+    print(s1 == s2)     # true
+    print(s1 == s3)     # false
+    print(s1 != s3)     # true
+
+    # Type conversions to string
+    print(str(42))      # 42
+    print(str(3.14))    # 3.14
+    print(str(true))    # true
+    print(str(false))   # false
+

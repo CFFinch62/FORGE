@@ -1,0 +1,16 @@
+=== Testing forge.buf module ===
+Created buffer with capacity 64
+create() returned valid handle: PASS
+write_byte/read_byte: PASS
+write_int16_le little-endian: PASS
+write_int32_le little-endian: PASS
+read_int16_le: PASS
+read_int32_le: PASS
+remaining after rewind: PASS
+remaining after seek(2): PASS
+length/capacity/position: PASS
+to_str: PASS
+to_hex: PASS
+write_str: PASS
+free_buf: PASS (no crash)
+=== forge.buf tests complete ===

@@ -1,0 +1,80 @@
+# Test procedure definitions and calls
+
+# Simple procedure with no args
+proc greet() -> void:
+    print("Hello!")
+
+# Procedure with one arg
+proc square(n: int) -> int:
+    return n * n
+
+# Procedure with multiple args
+proc add(a: int, b: int) -> int:
+    return a + b
+
+# Procedure with multiple args, different types
+proc repeat_str(s: str, n: int) -> str:
+    var result: str = ""
+    var i: int = 0
+    while i < n:
+        result = result + s
+        i = i + 1
+    return result
+
+# Procedure returning bool
+proc is_even(n: int) -> bool:
+    return n % 2 == 0
+
+# Procedure with local variables
+proc max_val(a: int, b: int) -> int:
+    var result: int = a
+    if b > a:
+        result = b
+    return result
+
+# Procedure with early return
+proc abs_val(n: int) -> int:
+    if n >= 0:
+        return n
+    return -n
+
+# Recursive procedure
+proc factorial(n: int) -> int:
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+proc main() -> void:
+    greet()
+
+    # square: 25, 0, 9
+    print(square(5))
+    print(square(0))
+    print(square(-3))
+
+    # add: 7, 0
+    print(add(3, 4))
+    print(add(-5, 5))
+
+    # repeat_str: ababab, xxxxx
+    print(repeat_str("ab", 3))
+    print(repeat_str("x", 5))
+
+    # is_even: true, false
+    print(is_even(4))
+    print(is_even(7))
+
+    # max_val: 5, 8, 4
+    print(max_val(5, 3))
+    print(max_val(2, 8))
+    print(max_val(4, 4))
+
+    # abs_val: 5, 5, 0
+    print(abs_val(5))
+    print(abs_val(-5))
+    print(abs_val(0))
+
+    # factorial: 120, 1
+    print(factorial(5))
+    print(factorial(0))
+

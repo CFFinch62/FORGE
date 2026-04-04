@@ -1,0 +1,11 @@
+# Factorial - Deep recursion test (n=20)
+
+proc fact(n: int) -> int:
+    if n <= 1:
+        return 1
+    return n * fact(n - 1)
+
+proc main() -> void:
+    var result: int = fact(20)
+    print(result)
+

@@ -1,0 +1,29 @@
+=== Testing forge.str module ===
+5
+true
+false
+true
+false
+true
+false
+1
+-1
+2
+HELLO
+hello
+hello
+hello  
+  hello
+hello
+world
+hello forge
+ababab
+olleh
+h
+o
+3
+a
+b
+c
+one-two-three
+=== forge.str tests complete ===

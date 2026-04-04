@@ -1,0 +1,46 @@
+=== Testing forge.math module ===
+-- Constants --
+3.14159
+2.71828
+6.28319
+-- abs --
+5.5
+3.14
+42
+17
+-- min/max --
+3
+7
+3
+7
+-- clamp --
+5
+0
+10
+-- pow/sqrt/cbrt --
+8
+4
+3
+-- rounding --
+3
+4
+4
+-3
+-- trig --
+0
+1
+0
+0.785398
+-- log/exp --
+1
+2
+3
+1
+-- random --
+true
+true
+true
+true
+true
+true
+=== Done ===

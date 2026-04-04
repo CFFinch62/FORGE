@@ -1,0 +1,36 @@
+# Test optional types
+
+proc main() -> void:
+    # Test some() - wrap value in optional
+    var maybe_int: ?int = some(42)
+    print("some(42) created")
+
+    # Test or_else - unwrap or use default
+    var value: int = maybe_int or_else 0
+    print(value)
+
+    # Test is some - check if optional has value
+    if maybe_int is some:
+        print("is some: true")
+
+    # Test none
+    var nothing: ?int = none
+    print("none created")
+
+    # Test is none - check if optional is empty
+    if nothing is none:
+        print("is none: true")
+
+    # Test or_else with none
+    var fallback: int = nothing or_else 100
+    print(fallback)
+
+    # Test optional string
+    var maybe_str: ?str = some("hello")
+    var str_val: str = maybe_str or_else "default"
+    print(str_val)
+
+    # Chain of or_else
+    var chain: int = nothing or_else 0
+    print(chain)
+

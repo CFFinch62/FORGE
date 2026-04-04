@@ -1,0 +1,86 @@
+# Test suite for forge.time module
+
+import forge.time
+import forge.io
+import forge.str
+
+proc main() -> void:
+    forge.io.print("=== Testing forge.time module ===")
+
+    # Test now() - returns milliseconds since epoch
+    var start: int = forge.time.now()
+    forge.io.print("Current time (ms since epoch): " + str(start))
+
+    # Time should be a large positive number (after year 2000)
+    # Year 2000 in ms is approximately 946,684,800,000
+    if start > 946684800000:
+        forge.io.print("now() sanity check: PASS")
+    else:
+        forge.io.print("now() sanity check: FAIL")
+
+    # Test timestamp() - returns ISO 8601 string
+    var ts: str = forge.time.timestamp()
+    forge.io.print("Timestamp: " + ts)
+
+    # Timestamp should start with 20 (year 2020+)
+    if forge.str.starts_with(ts, "20"):
+        forge.io.print("timestamp() format check: PASS")
+    else:
+        forge.io.print("timestamp() format check: FAIL")
+
+    # Timestamp should contain 'T' separator
+    if forge.str.contains(ts, "T"):
+        forge.io.print("timestamp() T separator: PASS")
+    else:
+        forge.io.print("timestamp() T separator: FAIL")
+
+    # Timestamp should end with 'Z' (UTC)
+    if forge.str.ends_with(ts, "Z"):
+        forge.io.print("timestamp() Z suffix: PASS")
+    else:
+        forge.io.print("timestamp() Z suffix: FAIL")
+
+    # Test elapsed_ms()
+    var before: int = forge.time.now()
+    # Do some work to take time
+    var sum: int = 0
+    for i in range(0, 1000):
+        sum = sum + i
+    var elapsed: int = forge.time.elapsed_ms(before)
+    forge.io.print("Elapsed time for loop: " + str(elapsed) + " ms")
+
+    # Elapsed should be non-negative
+    if elapsed >= 0:
+        forge.io.print("elapsed_ms() non-negative: PASS")
+    else:
+        forge.io.print("elapsed_ms() non-negative: FAIL")
+
+    # Test start_clock() - returns a clock value (same as now() in simple impl)
+    var clock: int = forge.time.start_clock()
+    if clock > 0:
+        forge.io.print("start_clock() returns positive: PASS")
+    else:
+        forge.io.print("start_clock() returns positive: FAIL")
+
+    # Test lap() - returns elapsed since clock start
+    var lap_time: int = forge.time.lap(clock)
+    if lap_time >= 0:
+        forge.io.print("lap() returns non-negative: PASS")
+    else:
+        forge.io.print("lap() returns non-negative: FAIL")
+
+    # Test sleep() - sleep for a short time
+    forge.io.print("Testing sleep(10)...")
+    var sleep_start: int = forge.time.now()
+    forge.time.sleep(10)
+    var sleep_elapsed: int = forge.time.elapsed_ms(sleep_start)
+    forge.io.print("Sleep took: " + str(sleep_elapsed) + " ms")
+
+    # Sleep should have taken at least 8ms (allowing some tolerance)
+    if sleep_elapsed >= 8:
+        forge.io.print("sleep() duration: PASS")
+    else:
+        forge.io.print("sleep() duration: FAIL (too fast)")
+
+    forge.io.print("=== All forge.time tests completed ===")
+

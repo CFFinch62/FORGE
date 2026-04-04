@@ -1,0 +1,137 @@
+# Test forge.nmea module - NMEA 0183 sentence parsing
+# Real NMEA sentences for testing
+
+import forge.io
+import forge.nmea
+
+proc main() -> void:
+    forge.io.print("=== forge.nmea Module Test ===\n")
+    
+    # Test NMEA sentences (real examples)
+    var gga: str = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,47.0,M,,*4F"
+    var rmc: str = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A"
+    var invalid: str = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,47.0,M,,*00"
+    
+    # Test 1: Validate checksum
+    forge.io.print("Test 1: Validate GGA checksum")
+    var valid: int = forge.nmea.validate(gga)
+    if valid == 1:
+        forge.io.print("  PASS: GGA checksum valid")
+    else:
+        forge.io.print("  FAIL: GGA checksum should be valid")
+    
+    # Test 2: Validate RMC checksum
+    forge.io.print("\nTest 2: Validate RMC checksum")
+    valid = forge.nmea.validate(rmc)
+    if valid == 1:
+        forge.io.print("  PASS: RMC checksum valid")
+    else:
+        forge.io.print("  FAIL: RMC checksum should be valid")
+    
+    # Test 3: Invalid checksum detection
+    forge.io.print("\nTest 3: Detect invalid checksum")
+    valid = forge.nmea.validate(invalid)
+    if valid == 0:
+        forge.io.print("  PASS: Invalid checksum detected")
+    else:
+        forge.io.print("  FAIL: Should detect invalid checksum")
+    
+    # Test 4: Calculate checksum
+    forge.io.print("\nTest 4: Calculate checksum")
+    var cs: str = forge.nmea.checksum(gga)
+    forge.io.print("  GGA checksum: ")
+    forge.io.print(cs)
+    if cs == "4F":
+        forge.io.print("  PASS: Checksum matches")
+    else:
+        forge.io.print("  FAIL: Expected 4F")
+    
+    # Test 5: Get sentence type
+    forge.io.print("\nTest 5: Get sentence type")
+    var stype: str = forge.nmea.sentence_type(gga)
+    forge.io.print("  GGA type: ")
+    forge.io.print(stype)
+    if stype == "GPGGA":
+        forge.io.print("  PASS: Type is GPGGA")
+    else:
+        forge.io.print("  FAIL: Expected GPGGA")
+    
+    # Test 6: Get talker ID
+    forge.io.print("\nTest 6: Get talker ID")
+    var talker: str = forge.nmea.get_talker(gga)
+    forge.io.print("  Talker: ")
+    forge.io.print(talker)
+    if talker == "GP":
+        forge.io.print("  PASS: Talker is GP")
+    else:
+        forge.io.print("  FAIL: Expected GP")
+    
+    # Test 7: Field count
+    forge.io.print("\nTest 7: Field count")
+    var count: int = forge.nmea.field_count(gga)
+    forge.io.print("  GGA field count: ")
+    forge.io.print(str(count))
+    if count == 15:
+        forge.io.print("  PASS: 15 fields")
+    else:
+        forge.io.print("  FAIL: Expected 15 fields")
+    
+    # Test 8: Get specific fields
+    forge.io.print("\nTest 8: Get specific fields")
+    var time_field: str = forge.nmea.get_field(gga, 1)
+    forge.io.print("  Time field: ")
+    forge.io.print(time_field)
+    if time_field == "123519":
+        forge.io.print("  PASS: Time is 123519")
+    else:
+        forge.io.print("  FAIL: Expected 123519")
+    
+    var lat_field: str = forge.nmea.get_field(gga, 2)
+    forge.io.print("  Lat field: ")
+    forge.io.print(lat_field)
+    if lat_field == "4807.038":
+        forge.io.print("  PASS: Lat raw is 4807.038")
+    else:
+        forge.io.print("  FAIL: Expected 4807.038")
+    
+    # Test 9: Parse latitude
+    forge.io.print("\nTest 9: Parse latitude (decimal degrees)")
+    var lat: float = forge.nmea.latitude(gga)
+    forge.io.print("  Latitude: ")
+    forge.io.print(str(lat))
+    # Expected: 48 + 7.038/60 = 48.1173
+    if lat > 48.11 and lat < 48.12:
+        forge.io.print("  PASS: Latitude ~48.117")
+    else:
+        forge.io.print("  FAIL: Expected ~48.117")
+    
+    # Test 10: Parse longitude
+    forge.io.print("\nTest 10: Parse longitude (decimal degrees)")
+    var lon: float = forge.nmea.longitude(gga)
+    forge.io.print("  Longitude: ")
+    forge.io.print(str(lon))
+    # Expected: 11 + 31.000/60 = 11.5167
+    if lon > 11.51 and lon < 11.52:
+        forge.io.print("  PASS: Longitude ~11.517")
+    else:
+        forge.io.print("  FAIL: Expected ~11.517")
+    
+    # Test 11: RMC sentence
+    forge.io.print("\nTest 11: RMC sentence parsing")
+    var rmc_type: str = forge.nmea.sentence_type(rmc)
+    forge.io.print("  RMC type: ")
+    forge.io.print(rmc_type)
+    var rmc_lat: float = forge.nmea.latitude(rmc)
+    forge.io.print("  RMC latitude: ")
+    forge.io.print(str(rmc_lat))
+    var rmc_lon: float = forge.nmea.longitude(rmc)
+    forge.io.print("  RMC longitude: ")
+    forge.io.print(str(rmc_lon))
+    
+    if rmc_type == "GPRMC" and rmc_lat > 48.11 and rmc_lon > 11.51:
+        forge.io.print("  PASS: RMC parsed correctly")
+    else:
+        forge.io.print("  FAIL: RMC parsing issue")
+    
+    forge.io.print("\n=== NMEA Test Complete ===")
+

@@ -1,0 +1,35 @@
+# Test comparison and logical operations
+
+proc main() -> void:
+    var a: int = 5
+    var b: int = 10
+    var c: int = 5
+
+    print(a == c)
+    print(a == b)
+    print(a != b)
+    print(a != c)
+
+    print(a < b)
+    print(a > b)
+    print(a <= c)
+    print(a >= c)
+    print(b > a)
+
+    print(true and true)
+    print(true and false)
+    print(false and true)
+    print(false and false)
+
+    print(true or true)
+    print(true or false)
+    print(false or true)
+    print(false or false)
+
+    print(not true)
+    print(not false)
+
+    print((a < b) and (b > c))
+    print((a > b) or (a == c))
+    print(not (a > b))
+

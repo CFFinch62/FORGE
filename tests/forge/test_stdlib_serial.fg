@@ -1,0 +1,85 @@
+# Test forge.serial module
+#
+# To run this test, first create virtual serial ports with BRIDGE
+# or with socat:
+#   socat -d -d pty,raw,echo=0,link=/tmp/ttyV0 pty,raw,echo=0,link=/tmp/ttyV1 &
+
+import forge.serial
+import forge.io
+
+proc main() -> void:
+    forge.io.print("=== forge.serial Module Test ===")
+
+    # Test 1: Open/close on non-existent port (should return -1)
+    forge.io.print("\nTest 1: Open non-existent port")
+    var bad_handle: int = forge.serial.open("/dev/nonexistent_port_xyz", 9600)
+    if bad_handle < 0:
+        forge.io.print("  PASS: Open failed as expected (handle < 0)")
+    else:
+        forge.io.print("  FAIL: Open should have failed")
+        forge.serial.close(bad_handle)
+
+    # Test 2: Open virtual port if available
+    forge.io.print("\nTest 2: Open virtual serial port")
+    var vport0: str = "/tmp/ttyV0"
+    var handle: int = forge.serial.open(vport0, 9600)
+
+    if handle >= 0:
+        forge.io.print("  PASS: Opened " + vport0 + " successfully")
+
+        # Test 3: Check is_open
+        forge.io.print("\nTest 3: Check is_open")
+        if forge.serial.is_open(handle) > 0:
+            forge.io.print("  PASS: Port reports as open")
+        else:
+            forge.io.print("  FAIL: Port should report as open")
+
+        # Test 4: Check baud rate
+        forge.io.print("\nTest 4: Check baud rate")
+        var baud: int = forge.serial.get_baud(handle)
+        if baud == 9600:
+            forge.io.print("  PASS: Baud rate is 9600")
+        else:
+            forge.io.print("  FAIL: Expected 9600, got " + str(baud))
+
+        # Test 5: bytes_available (should be 0 initially)
+        forge.io.print("\nTest 5: Check bytes_available")
+        var avail: int = forge.serial.bytes_available(handle)
+        forge.io.print("  Available bytes: " + str(avail))
+
+        # Test 6: Write a byte
+        forge.io.print("\nTest 6: Write byte")
+        forge.serial.write_byte(handle, 65)
+        forge.io.print("  Wrote byte 65 (A)")
+
+        # Test 7: Write a string
+        forge.io.print("\nTest 7: Write string")
+        forge.serial.write_str(handle, "Hello, Serial!\n")
+        forge.io.print("  Wrote Hello Serial")
+
+        # Test 8: Flush
+        forge.io.print("\nTest 8: Flush")
+        forge.serial.flush(handle)
+        forge.io.print("  Flushed output buffer")
+
+        # Test 9: Set timeout
+        forge.io.print("\nTest 9: Set timeout")
+        forge.serial.set_timeout(handle, 100)
+        forge.io.print("  Set timeout to 100ms")
+
+        # Test 10: Close
+        forge.io.print("\nTest 10: Close port")
+        forge.serial.close(handle)
+        forge.io.print("  Closed port")
+
+        # Test 11: Verify closed
+        forge.io.print("\nTest 11: Verify port is closed")
+        if forge.serial.is_open(handle) == 0:
+            forge.io.print("  PASS: Port reports as closed")
+        else:
+            forge.io.print("  FAIL: Port should report as closed")
+
+    else:
+        forge.io.print("  SKIP: Virtual port not available at " + vport0)
+        forge.io.print("  To test, run BRIDGE or socat")
+

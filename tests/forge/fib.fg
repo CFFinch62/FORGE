@@ -1,0 +1,11 @@
+# Fibonacci - Recursive implementation
+
+proc fib(n: int) -> int:
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+proc main() -> void:
+    var result: int = fib(10)
+    print(result)
+

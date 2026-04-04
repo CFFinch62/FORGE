@@ -1,0 +1,3 @@
+Runtime error: Division by zero
+  at tests/forge/div_zero.fg:6:20
+  in proc main() at line 3

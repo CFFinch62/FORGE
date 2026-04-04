@@ -1,0 +1,69 @@
+# Test forge.str standard library module
+
+import forge.io
+import forge.str
+
+proc main() -> void:
+    # Test len
+    var s: str = "hello"
+    forge.io.print("=== Testing forge.str module ===")
+    print(forge.str.len(s))
+
+    # Test contains
+    print(forge.str.contains(s, "ell"))
+    print(forge.str.contains(s, "xyz"))
+
+    # Test starts_with
+    print(forge.str.starts_with(s, "hel"))
+    print(forge.str.starts_with(s, "xyz"))
+
+    # Test ends_with
+    print(forge.str.ends_with(s, "llo"))
+    print(forge.str.ends_with(s, "xyz"))
+
+    # Test find
+    print(forge.str.find(s, "ell"))
+    print(forge.str.find(s, "xyz"))
+
+    # Test count
+    print(forge.str.count("abcabc", "bc"))
+
+    # Test upper/lower
+    print(forge.str.upper("hello"))
+    print(forge.str.lower("HELLO"))
+
+    # Test trim
+    print(forge.str.trim("  hello  "))
+    print(forge.str.trim_left("  hello  "))
+    print(forge.str.trim_right("  hello  "))
+
+    # Test substr
+    print(forge.str.substr("hello world", 0, 5))
+    print(forge.str.substr("hello world", 6, 5))
+
+    # Test replace
+    print(forge.str.replace("hello world", "world", "forge"))
+
+    # Test repeat
+    print(forge.str.repeat("ab", 3))
+
+    # Test reverse
+    print(forge.str.reverse("hello"))
+
+    # Test char_at
+    print(forge.str.char_at("hello", 0))
+    print(forge.str.char_at("hello", 4))
+
+    # Test split
+    var parts: []str = forge.str.split("a,b,c", ",")
+    print(len(parts))
+    print(parts[0])
+    print(parts[1])
+    print(parts[2])
+
+    # Test join
+    var arr: []str = ["one", "two", "three"]
+    print(forge.str.join(arr, "-"))
+
+    forge.io.print("=== forge.str tests complete ===")
+

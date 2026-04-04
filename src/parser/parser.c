@@ -742,11 +742,47 @@ forge_node_t* parse_type_alias(forge_parser_t* p, int exported) {
     return ast_type_alias(p->arena, name, type_expr, exported, line, col);
 }
 
-/* on handler declaration */
+/*
+ * on_handler ::= 'on' IDENT ( 'as' IDENT )? ':' NEWLINE block
+ *
+ * Registers a handler body that fires whenever the named channel emits.
+ * The optional 'as' clause binds the emitted payload to a local name.
+ * Void channels (no payload) omit the 'as' clause entirely.
+ *
+ * Examples:
+ *   on depth_update as d:
+ *       draw_depth(d)
+ *
+ *   on shutdown_signal:
+ *       running = false
+ */
 forge_node_t* parse_on_handler(forge_parser_t* p) {
-    (void)p;
-    parser_error(p, "on handlers not yet implemented");
-    return NULL;
+    int line = CURRENT(p).line;
+    int col  = CURRENT(p).column;
+
+    /* Consume 'on' */
+    expect(p, TOK_ON, "expected 'on'");
+
+    /* Channel name */
+    forge_token_t ch_tok = expect(p, TOK_IDENT, "expected channel name after 'on'");
+    const char* channel_name = ch_tok.val.str_val;
+
+    /* Optional 'as' binding for the payload value */
+    const char* param_name = NULL;
+    if (match(p, TOK_AS)) {
+        forge_token_t param_tok = expect(p, TOK_IDENT,
+                                         "expected parameter name after 'as'");
+        param_name = param_tok.val.str_val;
+    }
+
+    /* Colon then newline before the indented body (same as proc_decl) */
+    expect(p, TOK_COLON,   "expected ':' after on handler header");
+    expect(p, TOK_NEWLINE, "expected newline after ':'");
+
+    /* Indented handler body */
+    forge_node_t* body = parse_block(p);
+
+    return ast_on_handler(p->arena, channel_name, param_name, body, line, col);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

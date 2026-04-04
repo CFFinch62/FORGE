@@ -1,0 +1,49 @@
+# Test array operations
+
+proc main() -> void:
+    # Array literal
+    var nums: []int = [1, 2, 3, 4, 5]
+    print(len(nums))
+
+    # Array indexing
+    print(nums[0])
+    print(nums[2])
+    print(nums[4])
+
+    # Array modification
+    nums[0] = 100
+    print(nums[0])
+
+    # Iterate over array
+    print("Array elements:")
+    for n in nums:
+        print(n)
+
+    # String array
+    var names: []str = ["Alice", "Bob", "Charlie"]
+    print(len(names))
+    print(names[1])
+
+    # Iterate string array
+    print("Names:")
+    for name in names:
+        print(name)
+
+    # Sum array elements
+    var total: int = 0
+    for n in nums:
+        total = total + n
+    print(total)
+
+    # Bool array
+    var flags: []bool = [true, false, true]
+    print(flags[0])
+    print(flags[1])
+
+    # Nested array access (simulate 2D via 1D)
+    var matrix: []int = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    var row: int = 1
+    var col: int = 2
+    var idx: int = row * 3 + col
+    print(matrix[idx])
+

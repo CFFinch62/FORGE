@@ -1,0 +1,141 @@
+# Test suite for forge.buf module
+
+import forge.buf
+import forge.io
+
+proc main() -> void:
+    forge.io.print("=== Testing forge.buf module ===")
+
+    # Test create and basic write/read
+    var buf: int = forge.buf.create(64)
+    forge.io.print("Created buffer with capacity 64")
+
+    if buf >= 0:
+        forge.io.print("create() returned valid handle: PASS")
+    else:
+        forge.io.print("create() returned valid handle: FAIL")
+
+    # Test write_byte and read_byte
+    forge.buf.write_byte(buf, 0x41)  # 'A'
+    forge.buf.write_byte(buf, 0x42)  # 'B'
+    forge.buf.write_byte(buf, 0x43)  # 'C'
+
+    # Rewind to read
+    forge.buf.rewind(buf)
+
+    var b1: int = forge.buf.read_byte(buf)
+    var b2: int = forge.buf.read_byte(buf)
+    var b3: int = forge.buf.read_byte(buf)
+
+    if b1 == 0x41 and b2 == 0x42 and b3 == 0x43:
+        forge.io.print("write_byte/read_byte: PASS")
+    else:
+        forge.io.print("write_byte/read_byte: FAIL - got " + str(b1) + " " + str(b2) + " " + str(b3))
+
+    # Test write_int16_le
+    var buf2: int = forge.buf.create(32)
+    forge.buf.write_int16_le(buf2, 0x1234)
+    forge.buf.rewind(buf2)
+    var lo: int = forge.buf.read_byte(buf2)
+    var hi: int = forge.buf.read_byte(buf2)
+    
+    if lo == 0x34 and hi == 0x12:
+        forge.io.print("write_int16_le little-endian: PASS")
+    else:
+        forge.io.print("write_int16_le little-endian: FAIL - got lo=" + str(lo) + " hi=" + str(hi))
+
+    # Test write_int32_le
+    var buf3: int = forge.buf.create(32)
+    forge.buf.write_int32_le(buf3, 0x12345678)
+    forge.buf.rewind(buf3)
+    var b0: int = forge.buf.read_byte(buf3)
+    var b1_32: int = forge.buf.read_byte(buf3)
+    var b2_32: int = forge.buf.read_byte(buf3)
+    var b3_32: int = forge.buf.read_byte(buf3)
+    
+    if b0 == 0x78 and b1_32 == 0x56 and b2_32 == 0x34 and b3_32 == 0x12:
+        forge.io.print("write_int32_le little-endian: PASS")
+    else:
+        forge.io.print("write_int32_le little-endian: FAIL")
+
+    # Test read_int16_le and read_int32_le
+    forge.buf.rewind(buf2)
+    var val16: int = forge.buf.read_int16_le(buf2)
+    if val16 == 0x1234:
+        forge.io.print("read_int16_le: PASS")
+    else:
+        forge.io.print("read_int16_le: FAIL - got " + str(val16))
+
+    forge.buf.rewind(buf3)
+    var val32: int = forge.buf.read_int32_le(buf3)
+    if val32 == 0x12345678:
+        forge.io.print("read_int32_le: PASS")
+    else:
+        forge.io.print("read_int32_le: FAIL - got " + str(val32))
+
+    # Test seek and remaining
+    forge.buf.rewind(buf)
+    var rem_start: int = forge.buf.remaining(buf)
+    if rem_start == 3:
+        forge.io.print("remaining after rewind: PASS")
+    else:
+        forge.io.print("remaining after rewind: FAIL - got " + str(rem_start))
+
+    forge.buf.seek(buf, 2)
+    var rem_after_seek: int = forge.buf.remaining(buf)
+    if rem_after_seek == 1:
+        forge.io.print("remaining after seek(2): PASS")
+    else:
+        forge.io.print("remaining after seek(2): FAIL - got " + str(rem_after_seek))
+
+    # Test length, capacity, position
+    forge.buf.rewind(buf)
+    var len_val: int = forge.buf.length(buf)
+    var cap_val: int = forge.buf.capacity(buf)
+    var pos_val: int = forge.buf.position(buf)
+    
+    if len_val == 3 and cap_val >= 64 and pos_val == 0:
+        forge.io.print("length/capacity/position: PASS")
+    else:
+        forge.io.print("length/capacity/position: FAIL - len=" + str(len_val) + " cap=" + str(cap_val) + " pos=" + str(pos_val))
+
+    # Test to_str
+    forge.buf.rewind(buf)
+    var s: str = forge.buf.to_str(buf)
+    if s == "ABC":
+        forge.io.print("to_str: PASS")
+    else:
+        forge.io.print("to_str: FAIL - got '" + s + "'")
+
+    # Test to_hex
+    var buf_hex: int = forge.buf.create(16)
+    forge.buf.write_byte(buf_hex, 0xDE)
+    forge.buf.write_byte(buf_hex, 0xAD)
+    forge.buf.write_byte(buf_hex, 0xBE)
+    forge.buf.write_byte(buf_hex, 0xEF)
+    var hex_str: str = forge.buf.to_hex(buf_hex)
+    if hex_str == "DE AD BE EF":
+        forge.io.print("to_hex: PASS")
+    else:
+        forge.io.print("to_hex: FAIL - got '" + hex_str + "'")
+
+    # Test write_str
+    var buf_str: int = forge.buf.create(32)
+    forge.buf.write_str(buf_str, "Hello")
+    forge.buf.rewind(buf_str)
+    var str_out: str = forge.buf.to_str(buf_str)
+    if str_out == "Hello":
+        forge.io.print("write_str: PASS")
+    else:
+        forge.io.print("write_str: FAIL - got '" + str_out + "'")
+
+    # Test free_buf
+    forge.buf.free_buf(buf)
+    forge.buf.free_buf(buf2)
+    forge.buf.free_buf(buf3)
+    forge.buf.free_buf(buf_hex)
+    forge.buf.free_buf(buf_str)
+    forge.io.print("free_buf: PASS (no crash)")
+
+    forge.io.print("=== forge.buf tests complete ===")
+

@@ -1,0 +1,108 @@
+# Test forge.serial loopback through null modem
+#
+# Requires BRIDGE or socat with /tmp/ttyV0 and /tmp/ttyV1
+
+import forge.serial
+import forge.io
+import forge.time
+
+proc run_loopback_tests(port0: int, port1: int) -> void:
+    forge.io.print("Opened both ports successfully")
+
+    # Set timeouts
+    forge.serial.set_timeout(port0, 500)
+    forge.serial.set_timeout(port1, 500)
+
+    # Flush any pending data
+    forge.serial.flush(port0)
+    forge.serial.flush(port1)
+
+    # Drain any buffered input
+    while forge.serial.bytes_available(port0) > 0:
+        forge.serial.read_byte(port0)
+    while forge.serial.bytes_available(port1) > 0:
+        forge.serial.read_byte(port1)
+
+    forge.time.sleep(100)
+    
+    # Test 1: Write byte on port0, read on port1
+    forge.io.print("\nTest 1: Byte transfer port0 -> port1")
+    forge.serial.write_byte(port0, 42)
+    forge.serial.flush(port0)
+    forge.time.sleep(200)
+    
+    var avail: int = forge.serial.bytes_available(port1)
+    forge.io.print("  Bytes available on port1: " + str(avail))
+    
+    if avail > 0:
+        var byte_read: int = forge.serial.read_byte(port1)
+        if byte_read == 42:
+            forge.io.print("  PASS: Read byte 42")
+        else:
+            forge.io.print("  FAIL: Expected 42, got " + str(byte_read))
+    else:
+        forge.io.print("  FAIL: No bytes available")
+    
+    # Test 2: Write byte on port1, read on port0
+    forge.io.print("\nTest 2: Byte transfer port1 -> port0")
+    forge.serial.write_byte(port1, 99)
+    forge.serial.flush(port1)
+    forge.time.sleep(200)
+    
+    avail = forge.serial.bytes_available(port0)
+    if avail > 0:
+        var byte_read2: int = forge.serial.read_byte(port0)
+        if byte_read2 == 99:
+            forge.io.print("  PASS: Read byte 99")
+        else:
+            forge.io.print("  FAIL: Expected 99, got " + str(byte_read2))
+    else:
+        forge.io.print("  FAIL: No bytes available")
+    
+    # Test 3: Write string on port0, read line on port1
+    forge.io.print("\nTest 3: String transfer port0 -> port1")
+    forge.serial.write_str(port0, "Hello World\n")
+    forge.serial.flush(port0)
+    forge.time.sleep(100)
+    
+    var line: str = forge.serial.read_line(port1)
+    forge.io.print("  Received: [" + line + "]")
+    if line == "Hello World":
+        forge.io.print("  PASS: Received correct string")
+    else:
+        forge.io.print("  FAIL: String mismatch")
+    
+    # Test 4: Write string on port1, read line on port0
+    forge.io.print("\nTest 4: String transfer port1 -> port0")
+    forge.serial.write_str(port1, "NMEA Test\n")
+    forge.serial.flush(port1)
+    forge.time.sleep(100)
+    
+    var line2: str = forge.serial.read_line(port0)
+    forge.io.print("  Received: [" + line2 + "]")
+    if line2 == "NMEA Test":
+        forge.io.print("  PASS: Received correct string")
+    else:
+        forge.io.print("  FAIL: String mismatch")
+    
+    # Cleanup
+    forge.serial.close(port0)
+    forge.serial.close(port1)
+    forge.io.print("\n=== Loopback Test Complete ===")
+
+proc main() -> void:
+    forge.io.print("=== Serial Loopback Test ===")
+
+    # Open both ports
+    var port0: int = forge.serial.open("/tmp/ttyV0", 9600)
+    var port1: int = forge.serial.open("/tmp/ttyV1", 9600)
+
+    if port0 < 0:
+        forge.io.print("SKIP: Cannot open /tmp/ttyV0")
+
+    if port0 >= 0 and port1 < 0:
+        forge.io.print("SKIP: Cannot open /tmp/ttyV1")
+        forge.serial.close(port0)
+
+    if port0 >= 0 and port1 >= 0:
+        run_loopback_tests(port0, port1)

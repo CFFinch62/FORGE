@@ -1,0 +1,11 @@
+=== Testing forge.time module ===
+now() sanity check: PASS
+timestamp() format check: PASS
+timestamp() T separator: PASS
+timestamp() Z suffix: PASS
+elapsed_ms() non-negative: PASS
+start_clock() returns positive: PASS
+lap() returns non-negative: PASS
+sleep() duration: PASS
+=== All forge.time tests completed ===
+

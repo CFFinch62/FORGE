@@ -1,0 +1,22 @@
+# Test forge.io standard library module
+
+import forge.io
+
+proc main() -> void:
+    # Test print
+    forge.io.print("=== Testing forge.io module ===")
+    
+    # Test print_raw (prints without newline)
+    forge.io.print_raw("print_raw -> ")
+    forge.io.print("followed by print")
+    
+    # Test file operations
+    forge.io.write_file("/tmp/forge_test.txt", "Line 1")
+    forge.io.append_file("/tmp/forge_test.txt", "\nLine 2")
+    
+    # Just verify the operations run without error
+    forge.io.file_exists("/tmp/forge_test.txt")
+    forge.io.read_file("/tmp/forge_test.txt")
+    
+    forge.io.print("=== forge.io tests complete ===")
+

@@ -1,0 +1,13 @@
+# Fibonacci - Iterative (while loop)
+
+proc main() -> void:
+    var a: int = 0
+    var b: int = 1
+    var i: int = 0
+    while i < 10:
+        var temp: int = a + b
+        a = b
+        b = temp
+        i = i + 1
+    print(a)
+

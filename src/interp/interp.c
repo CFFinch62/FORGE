@@ -1027,11 +1027,23 @@ forge_value_t interp_eval_expr(forge_interp_t* interp, forge_env_t* env,
                             return val_none();
                         }
                     } else {
-                        interp_error(interp, expr->line, expr->column,
-                                     "Cannot call field access as function");
-                        for (int i = 0; i < arg_count; i++) val_free(&args[i]);
-                        forge_free(args);
-                        return val_none();
+                        /* Not a stdlib module — check if it is a user-defined
+                         * module.  This handles the common  mod.proc(args)
+                         * call pattern, which the parser emits as
+                         * NODE_FIELD_ACCESS(NODE_IDENT(mod), func_name). */
+                        forge_module_t* user_module =
+                            interp_get_module(interp, sub_name);
+                        if (user_module) {
+                            result = interp_call_module_proc(interp, user_module,
+                                                             func_name,
+                                                             args, arg_count);
+                        } else {
+                            interp_error(interp, expr->line, expr->column,
+                                         "Unknown module '%s'", sub_name);
+                            for (int i = 0; i < arg_count; i++) val_free(&args[i]);
+                            forge_free(args);
+                            return val_none();
+                        }
                     }
                 }
                 else {

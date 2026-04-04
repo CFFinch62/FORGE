@@ -1,0 +1,7 @@
+# channel_relay.fg — second user module that declares a channel
+# and fires it from a proc so the main file can subscribe via 'on'
+
+channel value_ready : int
+
+proc fire(n: int) -> void:
+    emit value_ready -> n

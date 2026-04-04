@@ -1,0 +1,27 @@
+# main.fg — entry point for the multi-file import test
+# Tests:
+#   1. Cross-module proc calls  (math_utils)
+#   2. Cross-module channel emit + on handler (channel_relay)
+#      Channel names are global — reference by simple name, not module-qualified
+
+import math_utils
+import channel_relay
+
+# Subscribe to the channel declared in channel_relay.
+# Channel names are global — use the simple name, not module-qualified.
+on value_ready as v:
+    print("channel received: " + str(v))
+
+proc main() -> void:
+    # --- Test 1: cross-module proc calls ---
+    var x: int = math_utils.double(21)
+    print("double(21) = " + str(x))
+
+    var y: int = math_utils.add(10, 32)
+    print("add(10,32) = " + str(y))
+
+    print(math_utils.greeting())
+
+    # --- Test 2: cross-module channel emit ---
+    channel_relay.fire(99)
+    channel_relay.fire(42)

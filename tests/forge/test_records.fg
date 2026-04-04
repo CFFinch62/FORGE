@@ -1,0 +1,32 @@
+# Test record definitions and literals
+
+record Point:
+    x: int
+    y: int
+
+record Person:
+    name: str
+    age: int
+    active: bool
+
+proc main() -> void:
+    # Test record literal creation
+    var p: Point = Point { x: 10, y: 20 }
+    print(p.x)
+    print(p.y)
+
+    # Test another record
+    var person: Person = Person { name: "Alice", age: 30, active: true }
+    print(person.name)
+    print(person.age)
+    if person.active:
+        print("Active")
+
+    # Test field reassignment (if supported)
+    # p.x = 100  # TODO: Field assignment
+
+    # Test record with computed values
+    var q: Point = Point { x: p.x + 5, y: p.y * 2 }
+    print(q.x)
+    print(q.y)
+

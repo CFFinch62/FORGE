@@ -1,0 +1,49 @@
+# Test forge.sys standard library module
+
+import forge.io
+import forge.sys
+
+proc main() -> void:
+    forge.io.print("=== Testing forge.sys module ===")
+
+    # Test platform and arch
+    var p: str = forge.sys.platform()
+    var a: str = forge.sys.arch()
+
+    forge.io.print("Platform: " + p)
+    forge.io.print("Arch: " + a)
+
+    # Verify platform is one of expected values
+    if p == "linux" or p == "macos" or p == "windows" or p == "embedded":
+        forge.io.print("Platform valid: PASS")
+    else:
+        forge.io.print("Platform valid: FAIL")
+
+    # Verify arch is one of expected values
+    if a == "x86_64" or a == "arm64" or a == "arm" or a == "riscv64" or a == "riscv32" or a == "x86" or a == "unknown":
+        forge.io.print("Arch valid: PASS")
+    else:
+        forge.io.print("Arch valid: FAIL")
+
+    # Test env - check a common env var
+    var home: str = forge.sys.env("HOME")
+    if len(home) > 0:
+        forge.io.print("HOME env: PASS")
+    else:
+        # HOME might not be set on all systems
+        forge.io.print("HOME env: (empty or not set)")
+
+    # Test env with non-existent var
+    var nonexistent: str = forge.sys.env("FORGE_NONEXISTENT_VAR_12345")
+    if len(nonexistent) == 0:
+        forge.io.print("Nonexistent env: PASS")
+    else:
+        forge.io.print("Nonexistent env: FAIL")
+
+    # Test args - just verify we can call it and it returns an array
+    var arguments: []str = forge.sys.args()
+    forge.io.print("Args count: " + str(len(arguments)))
+
+    # Note: exit and halt are not tested as they would terminate the program
+    forge.io.print("=== All forge.sys tests completed ===")
+

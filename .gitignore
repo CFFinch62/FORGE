@@ -1,8 +1,9 @@
 # Build artifacts
 *.o
 *.a
-forge
+/forge
 forge-build/
+dist/ForgeIDE/_internal/forge
 
 # Editor files
 *.swp

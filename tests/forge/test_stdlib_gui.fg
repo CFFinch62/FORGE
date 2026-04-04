@@ -1,0 +1,73 @@
+# Test forge.gui standard library module
+# This test is interactive (opens a GUI window) — no .expected file
+# Run with: ./forge run tests/forge/test_stdlib_gui.fg
+# Requires: make GUI=1
+
+import forge.gui
+
+proc main() -> void:
+    print("=== Testing forge.gui module ===")
+
+    # Initialize window
+    gui.init_window(800, 600, "FORGE GUI Test")
+    gui.set_target_fps(60)
+    gui.set_style_dark()
+
+    var click_count: int = 0
+    var slider_val: float = 50.0
+    var check_state: bool = false
+
+    while gui.window_open():
+        gui.begin_draw()
+        gui.clear(30, 30, 30, 255)
+
+        # Title
+        gui.draw_text("FORGE GUI Test Suite", 20, 20, 28, 255, 255, 255, 255)
+        gui.draw_text("Press ESC or close window to exit", 20, 55, 16, 180, 180, 180, 255)
+
+        # FPS display
+        var fps_str: str = "FPS: " + str(gui.get_fps())
+        gui.draw_text(fps_str, 680, 20, 16, 0, 255, 100, 255)
+
+        # Shape drawing tests
+        gui.draw_text("Shapes:", 20, 100, 20, 200, 200, 255, 255)
+        gui.draw_rect(20, 130, 120, 60, 0, 120, 255, 200)
+        gui.draw_rect_lines(160, 130, 120, 60, 255, 200, 0, 255)
+        gui.draw_circle(370, 160, 30.0, 255, 60, 60, 255)
+        gui.draw_circle_lines(450, 160, 30.0, 60, 255, 60, 255)
+        gui.draw_line(500, 130, 620, 190, 255, 255, 0, 255)
+
+        # Mouse position tracking
+        var mx: int = gui.mouse_x()
+        var my: int = gui.mouse_y()
+        gui.draw_text("Mouse: " + str(mx) + ", " + str(my), 20, 210, 16, 180, 180, 180, 255)
+
+        # Keyboard input test
+        if gui.is_key_pressed(32):
+            print("SPACE key pressed!")
+
+        var last_key: int = gui.get_key_pressed()
+        if last_key > 0:
+            gui.draw_text("Last key: " + str(last_key), 250, 210, 16, 180, 180, 180, 255)
+
+        # Widget tests
+        gui.draw_text("Widgets:", 20, 250, 20, 200, 200, 255, 255)
+
+        # Button
+        if gui.button(20, 280, 160, 40, "Click Me"):
+            click_count = click_count + 1
+            print("Button clicked! Count: " + str(click_count))
+        gui.draw_text("Clicks: " + str(click_count), 200, 290, 18, 255, 255, 255, 255)
+
+        # Slider
+        gui.draw_text("Slider:", 20, 340, 16, 180, 180, 180, 255)
+        slider_val = gui.slider(20, 365, 300, 20, 0.0, 100.0, slider_val)
+        gui.draw_text("Value: " + str(int(slider_val)), 340, 362, 16, 255, 255, 255, 255)
+
+        # Label
+        gui.label(20, 410, 300, 30, "This is a raygui label widget")
+
+        gui.end_draw()
+
+    gui.close_window()
+    print("=== forge.gui test complete ===")

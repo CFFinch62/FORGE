@@ -1,0 +1,57 @@
+# Test variable declarations and assignments
+
+proc main() -> void:
+    # Integer variables
+    var a: int = 10
+    var b: int = 20
+    print(a)       # 10
+    print(b)       # 20
+
+    # Assignment
+    a = 30
+    print(a)       # 30
+
+    # Float variables
+    var pi: float = 3.14159
+    var e: float = 2.71828
+    print(pi)
+    print(e)
+
+    # Boolean variables
+    var flag: bool = true
+    print(flag)    # true
+    flag = false
+    print(flag)    # false
+
+    # String variables
+    var name: str = "Alice"
+    print(name)    # Alice
+    name = "Bob"
+    print(name)    # Bob
+
+    # Variable shadowing in different scopes
+    var x: int = 1
+    print(x)       # 1
+    if true:
+        var x: int = 2
+        print(x)   # 2
+    print(x)       # 1 (outer x unchanged)
+
+    # Compound-style assignments
+    var n: int = 10
+    n = n + 5
+    print(n)       # 15
+    n = n - 3
+    print(n)       # 12
+    n = n * 2
+    print(n)       # 24
+    n = n / 4
+    print(n)       # 6
+
+    # Variable copy
+    var p: int = 5
+    var q: int = 10
+    p = q
+    print(p)       # 10
+    print(q)       # 10
+
