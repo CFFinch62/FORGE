@@ -5,6 +5,9 @@
 forge-build/
 dist/ForgeIDE/_internal/forge
 
+# Production apps (developed here, will be moved to their own repos)
+apps/
+
 # Editor files
 *.swp
 *.swo
