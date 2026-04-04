@@ -605,6 +605,30 @@ static int cmd_run(const forge_cli_args_t* args) {
         forge_interp_t* interp = interp_create(arena, strtable);
         interp->current_filename = args->input_file;
 
+        /* Channel pre-registration pre-pass
+         *
+         * Channels declared in the main program are normally registered during
+         * interp_run() Phase 1.  However, load_user_modules() (below) calls
+         * interp_load_module() for each imported file, and that function
+         * immediately registers any on-handlers found in the module.
+         * interp_register_handler() looks up the target channel by name — if
+         * the channel has not been registered yet the lookup fails and the
+         * handler is silently lost (or errors).
+         *
+         * Remedy: walk the main program's declaration list and register every
+         * NODE_CHANNEL_DECL before loading any user modules.
+         * interp_register_channel() is idempotent, so the duplicate encounter
+         * during interp_run() Phase 1 is handled gracefully. */
+        {
+            forge_node_t** decls = program->data.program.decls;
+            int n = program->data.program.decl_count;
+            for (int i = 0; i < n; i++) {
+                if (decls[i] && decls[i]->kind == NODE_CHANNEL_DECL) {
+                    interp_register_channel(interp, decls[i]);
+                }
+            }
+        }
+
         /* Pre-load every user module referenced by import statements before
          * interp_run() is called.  The interpreter engine already supports
          * multi-module programs; this step performs the file-system discovery

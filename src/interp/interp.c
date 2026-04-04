@@ -102,6 +102,20 @@ void interp_print_stack(forge_interp_t* interp) {
  * Interpreter Lifecycle
  * ───────────────────────────────────────────────────────────────────────────── */
 
+/* Helper: create and register a synthetic stdlib module entry. */
+static void interp_register_stdlib(forge_interp_t* interp, const char* name) {
+    forge_module_t* m = forge_malloc(sizeof(forge_module_t));
+    m->name        = name;
+    m->filepath    = "<stdlib>";
+    m->program     = NULL;
+    m->env         = env_create(NULL);
+    m->procedures  = hashmap_create();
+    m->records     = hashmap_create();
+    m->initialized = 1;
+    m->is_stdlib   = 1;
+    hashmap_set(interp->modules, name, m);
+}
+
 forge_interp_t* interp_create(forge_arena_t* arena, forge_strtable_t* strtable) {
     forge_interp_t* interp = forge_malloc(sizeof(forge_interp_t));
 
@@ -118,6 +132,22 @@ forge_interp_t* interp_create(forge_arena_t* arena, forge_strtable_t* strtable) 
     interp->call_depth = 0;
     interp->had_error = 0;
     interp->error_msg[0] = '\0';
+
+    /* Pre-register all stdlib modules so that forge.io.*, forge.str.* etc.
+     * are always callable regardless of which file contains the import.
+     * User modules that import forge.* would otherwise only register the
+     * synthetic entry when interp_run() processes the main program's imports —
+     * but user modules loaded via interp_load_module() never go through that
+     * path, causing "Module not imported" errors at call sites inside modules. */
+    interp_register_stdlib(interp, "forge.io");
+    interp_register_stdlib(interp, "forge.str");
+    interp_register_stdlib(interp, "forge.math");
+    interp_register_stdlib(interp, "forge.sys");
+    interp_register_stdlib(interp, "forge.time");
+    interp_register_stdlib(interp, "forge.buf");
+    interp_register_stdlib(interp, "forge.serial");
+    interp_register_stdlib(interp, "forge.nmea");
+    interp_register_stdlib(interp, "forge.gui");
 
     return interp;
 }
@@ -4021,6 +4051,20 @@ forge_value_t interp_call_proc(forge_interp_t* interp, forge_env_t* env,
 
     /* Look up user-defined procedure */
     forge_node_t* proc = (forge_node_t*)hashmap_get(interp->procedures, name);
+    if (!proc && interp->current_module) {
+        /* Intra-module call: a proc inside a module calls another proc in the
+         * same module using its unqualified name.  current_module is set by
+         * interp_call_module_proc() for the duration of a module proc's
+         * execution, so we can use it to resolve the callee and then delegate
+         * the full call (env setup, arg binding, return handling) back to
+         * interp_call_module_proc() which uses the correct module env. */
+        forge_node_t* mod_proc = (forge_node_t*)hashmap_get(
+                                     interp->current_module->procedures, name);
+        if (mod_proc) {
+            return interp_call_module_proc(interp, interp->current_module,
+                                           name, args, arg_count);
+        }
+    }
     if (!proc) {
         interp_error(interp, 0, 0, "Undefined procedure '%s'", name);
         return val_none();
@@ -4303,10 +4347,13 @@ void interp_register_channel(forge_interp_t* interp, forge_node_t* decl) {
 
     const char* name = decl->data.channel.name;
 
-    /* Check if channel already registered */
+    /* Idempotent: skip silently if already registered.
+     * cmd_run() performs a channel pre-registration pass over the main
+     * program before load_user_modules() runs, so that module on-handlers
+     * can reference channels declared in the entry-point file.  When
+     * interp_run() later processes the same declarations in Phase 1 it
+     * must not treat the duplicate as an error. */
     if (hashmap_has(interp->channels, name)) {
-        interp_error(interp, decl->line, decl->column,
-                     "Channel '%s' already declared", name);
         return;
     }
 
@@ -4362,12 +4409,17 @@ void interp_emit(forge_interp_t* interp, forge_env_t* env,
         forge_node_t* handler = entry->handler;
         forge_module_t* handler_module = entry->module;
 
-        /* Determine which environment to use */
+        /* Determine which environment to use as the handler's parent.
+         * - Module handlers: the module's own env (so they see their globals).
+         * - Main-program handlers: interp->globals, NOT the call-site env.
+         *   Using the call-site env would make the handler inherit the emitting
+         *   module's scope (e.g. nmea_sim's env) instead of the main program's
+         *   globals where variables like g_log_line are defined. */
         forge_env_t* handler_env;
         if (handler_module) {
             handler_env = env_create(handler_module->env);
         } else {
-            handler_env = env_create(env);
+            handler_env = env_create(interp->globals);
         }
 
         /* Bind payload to parameter if specified */
