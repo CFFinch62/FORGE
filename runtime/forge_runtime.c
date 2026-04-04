@@ -1862,7 +1862,7 @@ forge_str_t forge_nmea_sentence_type(forge_str_t sentence) {
     if (sentence.len < 2) return forge_str_lit("");
 
     const char* data = sentence.data;
-    int start = (data[0] == '$') ? 1 : 0;
+    int start = (data[0] == '$' || data[0] == '!') ? 1 : 0;
 
     /* Find first comma */
     int end = start;
@@ -1872,7 +1872,12 @@ forge_str_t forge_nmea_sentence_type(forge_str_t sentence) {
 
     if (end <= start) return forge_str_lit("");
 
-    return forge_str_dup(data + start, end - start);
+    /* Skip the 2-character talker-ID prefix (e.g. "GP", "HC", "AI")
+     * so callers receive the bare sentence code: "GGA", "RMC", "VDM" … */
+    int type_start = start + 2;
+    if (type_start >= end) return forge_str_lit("");
+
+    return forge_str_dup(data + type_start, end - type_start);
 }
 
 void forge_nmea_sentence_type_ptr(forge_str_t* out, forge_str_t* sentence) {

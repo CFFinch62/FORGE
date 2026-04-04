@@ -2619,6 +2619,30 @@ static int try_stdlib_str(forge_interp_t* interp, const char* proc_name,
         *result = stdlib_str_join(interp, args, arg_count);
         return 1;
     }
+    if (strcmp(proc_name, "to_float") == 0) {
+        if (arg_count > 0 && args[0].kind == VAL_STR) {
+            char buf[64];
+            int n = (int)args[0].as.str.len < 63 ? (int)args[0].as.str.len : 63;
+            memcpy(buf, args[0].as.str.data, (size_t)n);
+            buf[n] = '\0';
+            *result = val_float(strtod(buf, NULL));
+            return 1;
+        }
+        *result = val_float(0.0);
+        return 1;
+    }
+    if (strcmp(proc_name, "to_int") == 0) {
+        if (arg_count > 0 && args[0].kind == VAL_STR) {
+            char buf[64];
+            int n = (int)args[0].as.str.len < 63 ? (int)args[0].as.str.len : 63;
+            memcpy(buf, args[0].as.str.data, (size_t)n);
+            buf[n] = '\0';
+            *result = val_int((int64_t)strtol(buf, NULL, 10));
+            return 1;
+        }
+        *result = val_int(0);
+        return 1;
+    }
     return 0;
 }
 
@@ -2793,6 +2817,18 @@ static int try_stdlib_math(forge_interp_t* interp, const char* proc_name,
         double y = args[0].kind == VAL_FLOAT ? args[0].as.f : (double)args[0].as.i;
         double x = args[1].kind == VAL_FLOAT ? args[1].as.f : (double)args[1].as.i;
         *result = val_float(atan2(y, x));
+        return 1;
+    }
+    if (strcmp(proc_name, "to_int") == 0) {
+        if (arg_count < 1) { *result = val_int(0); return 1; }
+        double x = args[0].kind == VAL_FLOAT ? args[0].as.f : (double)args[0].as.i;
+        *result = val_int((int64_t)x);
+        return 1;
+    }
+    if (strcmp(proc_name, "floor") == 0) {
+        if (arg_count < 1) { *result = val_int(0); return 1; }
+        double x = args[0].kind == VAL_FLOAT ? args[0].as.f : (double)args[0].as.i;
+        *result = val_int((int64_t)floor(x));
         return 1;
     }
 
@@ -3627,11 +3663,11 @@ static int try_stdlib_nmea(forge_interp_t* interp, const char* proc_name,
         return 1;
     }
 
-    if (strcmp(proc_name, "get_field") == 0) {
+    if (strcmp(proc_name, "get_field") == 0 || strcmp(proc_name, "field") == 0) {
         if (arg_count >= 2 && args[0].kind == VAL_STR && args[1].kind == VAL_INT) {
             forge_str_t sentence = interp_str_to_runtime(&args[0]);
-            forge_str_t field = forge_nmea_get_field(sentence, args[1].as.i);
-            *result = runtime_str_to_interp(field);
+            forge_str_t fld = forge_nmea_get_field(sentence, args[1].as.i);
+            *result = runtime_str_to_interp(fld);
             return 1;
         }
         *result = val_str_lit("");
