@@ -68,8 +68,18 @@ proc handle_gga(sentence: str) -> void:
 
 proc handle_rmc(sentence: str) -> void:
     # RMC fields: 1=time, 2=status, 3=lat, 4=N/S, 5=lon, 6=E/W, 7=SOG, 8=COG
-    var sog: str = forge.nmea.field(sentence, 7)
-    var cog: str = forge.nmea.field(sentence, 8)
+    var lat  : str = forge.nmea.field(sentence, 3)
+    var lat_d: str = forge.nmea.field(sentence, 4)
+    var lon  : str = forge.nmea.field(sentence, 5)
+    var lon_d: str = forge.nmea.field(sentence, 6)
+    var sog  : str = forge.nmea.field(sentence, 7)
+    var cog  : str = forge.nmea.field(sentence, 8)
+    # Emit position from RMC so the radar works even when the device does not
+    # send GGA.  Many live GPS units send RMC as their primary (or only)
+    # position sentence — without this the radar guard (g_lat_f != 0.0)
+    # would never pass and AIS targets would not be plotted.
+    if forge.str.len(lat) > 0:
+        emit position_update -> lat + " " + lat_d + "|" + lon + " " + lon_d
     emit speed_update -> sog
     emit cog_update   -> cog
 

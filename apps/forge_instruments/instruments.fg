@@ -123,7 +123,10 @@ on position_update as pos:
 on speed_update as spd:
     if g_paused:
         return
-    g_sog_str = spd
+    # Normalise to 1 decimal place — raw NMEA strings vary: RMC gives "6.8",
+    # VTG gives "6.800".  Both sources emit on this channel and would otherwise
+    # flicker the display between different decimal widths every few frames.
+    g_sog_str = forge.str.from_float(forge.str.to_float(spd), 1)
 
 on cog_update as cog:
     if g_paused:
@@ -653,6 +656,9 @@ proc draw_settings_panel() -> void:
             g_connected = false
             g_mode = "LIVE"
             save_settings()
+    elif g_mode == "SIM":
+        # SIM is running — grey out Connect so live data cannot be started
+        forge.gui.color_button(170, 295, 140, 34, "Connect", 55, 55, 55, 255, 28, 28, 28, 255)
     else:
         if forge.gui.button(170, 295, 140, 34, "Connect"):
             var baud : int = 4800
@@ -671,6 +677,8 @@ proc draw_settings_panel() -> void:
 
     if g_connected:
         forge.gui.draw_text("Connected: " + g_port_str, 330, 305, 12, 60, 210, 100, 255)
+    elif g_mode == "SIM":
+        forge.gui.draw_text("Stop SIM to enable serial connection", 330, 305, 12, 180, 100, 40, 255)
     else:
         forge.gui.draw_text("Not connected", 330, 305, 12, 200, 120, 60, 255)
 
@@ -795,11 +803,16 @@ proc main() -> void:
         forge.gui.draw_rect(0, 0, 1200, 50, 10, 18, 38, 255)
         forge.gui.draw_text("FORGE INSTRUMENTS", 20, 14, 22, 255, 210, 55, 255)
 
-        # SIM / LIVE toggle button — colour-coded so mode is obvious at a glance
+        # SIM / LIVE toggle button — colour-coded so mode is obvious at a glance.
+        # Mutual lock-out: SIM cannot start while a live port is open, and a live
+        # port cannot be opened while SIM is running (enforced again in settings).
         if g_mode == "SIM":
             if forge.gui.color_button(840, 10, 110, 30, "SIM  > LIVE", 40, 110, 40, 255, 18, 55, 18, 255):
                 nmea_sim.stop()
                 g_mode = "LIVE"
+        elif g_connected:
+            # Live port is open — show a greyed-out, non-interactive SIM button
+            forge.gui.color_button(840, 10, 110, 30, "SIM LOCKED", 55, 55, 55, 255, 28, 28, 28, 255)
         else:
             if forge.gui.color_button(840, 10, 110, 30, "LIVE > SIM", 140, 100, 30, 255, 75, 50, 12, 255):
                 nmea_sim.start()
