@@ -19,6 +19,7 @@ import logger
 
 channel nmea_raw_sentence  : str
 channel position_update    : str
+channel pos_source_update  : str
 channel speed_update       : str
 channel cog_update         : str
 channel heading_update     : str
@@ -27,6 +28,14 @@ channel temp_update        : str
 channel wind_update        : str
 channel ais_target_update  : str
 channel alarm_event        : str
+channel sat_update         : str   # GSV: "count|PRN:el:az:snr|..."
+channel fix_update         : str   # GSA: "fixtype|pdop|hdop|vdop|used_prns..."
+channel time_update        : str   # ZDA: "HH:MM:SS|DD/MM/YYYY"
+channel xte_update         : str   # XTE: "magnitude|L_or_R"
+channel nav_update         : str   # RMB: "dest|bearing|dist|vmg|arrived"
+channel autopilot_update   : str   # APB: "xte|dir|dest|heading_to_steer"
+channel waypoint_update    : str   # BOD: "bearing_t|bearing_m|dest|origin"
+channel water_speed_update : str   # VHW: "stw_knots"
 
 # ── display state (written by on-handlers, read by the render loop) ───────────
 
@@ -61,6 +70,42 @@ var g_ais_t8    : str = ""
 var g_ais_t9    : str = ""
 var g_ais_next  : int = 0    # next slot to overwrite when no MMSI match
 var g_ais_scroll: int = 0    # first visible row in the AIS list panel
+
+# ── position source ───────────────────────────────────────────────────────────
+var g_pos_source    : str  = "---"   # "RMC", "GGA", or "GLL"
+
+# ── satellite state (populated by GSV + GSA) ───────────────────────────────────
+var g_sat_count     : int  = 0       # total satellites in view
+var g_sat_data      : str  = ""      # raw "PRN:el:az:snr|..." string from GSV
+var g_sat_used_list : str  = ""      # pipe-delimited PRN list from GSA
+var g_sat_used_n    : int  = 0       # count of satellites used in fix
+var g_fix_type      : str  = "---"   # "No Fix" | "2D" | "3D"
+var g_pdop_str      : str  = "---"
+var g_hdop_str      : str  = "---"
+var g_vdop_str      : str  = "---"
+
+# ── voyage / navigation state ─────────────────────────────────────────────────
+var g_utc_time      : str  = "--:--:--"
+var g_utc_date      : str  = "--/--/----"
+var g_xte_mag       : str  = "---"
+var g_xte_dir       : str  = "-"     # "L" or "R"
+var g_stw_str       : str  = "---"   # water speed (STW) from VHW
+var g_nav_dest      : str  = "---"
+var g_nav_bearing   : str  = "---"
+var g_nav_dist      : str  = "---"
+var g_nav_vmg       : str  = "---"
+var g_nav_arrived   : str  = "V"
+var g_apb_xte       : str  = "---"
+var g_apb_xte_dir   : str  = "-"
+var g_apb_dest      : str  = "---"
+var g_apb_hts       : str  = "---"   # heading to steer from APB
+var g_bod_bearing_t : str  = "---"
+var g_bod_bearing_m : str  = "---"
+var g_bod_dest      : str  = "---"
+var g_bod_origin    : str  = "---"
+
+# ── log area tab ───────────────────────────────────────────────────────────────
+var g_log_tab       : int  = 0       # 0=NMEA LOG  1=SATELLITES  2=VOYAGE DATA
 
 # ── operational state ─────────────────────────────────────────────────────────
 var g_settings_open : bool = false
@@ -158,6 +203,60 @@ on wind_update as wnd:
         g_wind_spd_str = forge.str.substr(wnd, sep + 1, forge.str.len(wnd) - sep - 1)
         g_wind_ang_deg = forge.str.to_float(g_wind_ang_str)
 
+on pos_source_update as src:
+    g_pos_source = src
+
+on sat_update as sat:
+    # Format: "count|PRN:el:az:snr|PRN:el:az:snr|..."
+    var sep: int = forge.str.find(sat, "|")
+    if sep >= 0:
+        g_sat_count = forge.str.to_int(forge.str.substr(sat, 0, sep))
+        g_sat_data  = forge.str.substr(sat, sep + 1, forge.str.len(sat) - sep - 1)
+
+on fix_update as fix:
+    # Format: "fixtype|pdop|hdop|vdop|PRN|PRN|..."
+    var parts: array = forge.str.split(fix, "|")
+    var plen : int   = len(parts)
+    if plen > 0:
+        var fn: int = forge.str.to_int(parts[0])
+        if fn == 1:
+            g_fix_type = "No Fix"
+        elif fn == 2:
+            g_fix_type = "2D"
+        elif fn == 3:
+            g_fix_type = "3D"
+    if plen > 1:
+        g_pdop_str = parts[1]
+    if plen > 2:
+        g_hdop_str = parts[2]
+    if plen > 3:
+        g_vdop_str = parts[3]
+    # Rebuild used-satellite list and count from fields 4+
+    var used_buf: str = ""
+    var i       : int = 4
+    loop:
+        if i >= plen:
+            break
+        if forge.str.len(used_buf) > 0:
+            used_buf = used_buf + "|"
+        used_buf = used_buf + parts[i]
+        i = i + 1
+    g_sat_used_list = used_buf
+    # Count entries: number of | separators + 1  (0 if empty)
+    var cnt : int = 0
+    var ci  : int = 0
+    var ulen: int = forge.str.len(used_buf)
+    loop:
+        if ci >= ulen:
+            break
+        if forge.str.char_at(used_buf, ci) == 124:   # ASCII 124 = '|'
+            cnt = cnt + 1
+        ci = ci + 1
+    if ulen > 0:
+        g_sat_used_n = cnt + 1
+    else:
+        g_sat_used_n = 0
+
 on ais_target_update as tgt:
     if g_paused:
         return
@@ -239,6 +338,71 @@ on ais_target_update as tgt:
         g_ais_t9 = tgt
     g_ais_next = (g_ais_next + 1) % 10
 
+on time_update as t:
+    if g_paused:
+        return
+    var sep: int = forge.str.find(t, "|")
+    if sep >= 0:
+        g_utc_time = forge.str.substr(t, 0, sep)
+        g_utc_date = forge.str.substr(t, sep + 1, forge.str.len(t) - sep - 1)
+
+on xte_update as xte:
+    if g_paused:
+        return
+    var sep: int = forge.str.find(xte, "|")
+    if sep >= 0:
+        g_xte_mag = forge.str.from_float(forge.str.to_float(forge.str.substr(xte, 0, sep)), 2)
+        g_xte_dir = forge.str.substr(xte, sep + 1, 1)
+
+on nav_update as nav:
+    if g_paused:
+        return
+    var parts: array = forge.str.split(nav, "|")
+    var plen : int   = len(parts)
+    if plen > 0:
+        g_nav_dest    = parts[0]
+    if plen > 1:
+        g_nav_bearing = forge.str.from_float(forge.str.to_float(parts[1]), 1)
+    if plen > 2:
+        g_nav_dist    = forge.str.from_float(forge.str.to_float(parts[2]), 2)
+    if plen > 3:
+        g_nav_vmg     = forge.str.from_float(forge.str.to_float(parts[3]), 1)
+    if plen > 4:
+        g_nav_arrived = parts[4]
+
+on autopilot_update as ap:
+    if g_paused:
+        return
+    var parts: array = forge.str.split(ap, "|")
+    var plen : int   = len(parts)
+    if plen > 0:
+        g_apb_xte     = forge.str.from_float(forge.str.to_float(parts[0]), 2)
+    if plen > 1:
+        g_apb_xte_dir = parts[1]
+    if plen > 2:
+        g_apb_dest    = parts[2]
+    if plen > 3:
+        g_apb_hts     = forge.str.from_float(forge.str.to_float(parts[3]), 1)
+
+on waypoint_update as wp:
+    if g_paused:
+        return
+    var parts: array = forge.str.split(wp, "|")
+    var plen : int   = len(parts)
+    if plen > 0:
+        g_bod_bearing_t = forge.str.from_float(forge.str.to_float(parts[0]), 1)
+    if plen > 1:
+        g_bod_bearing_m = forge.str.from_float(forge.str.to_float(parts[1]), 1)
+    if plen > 2:
+        g_bod_dest      = parts[2]
+    if plen > 3:
+        g_bod_origin    = parts[3]
+
+on water_speed_update as stw:
+    if g_paused:
+        return
+    g_stw_str = forge.str.from_float(forge.str.to_float(stw), 1)
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 proc apply_font_size() -> void:
@@ -291,6 +455,36 @@ proc clear_all_data() -> void:
     g_ais_t9 = ""
     g_ais_next   = 0
     g_ais_scroll = 0
+    # Reset parser priority so the source label re-appears after a clear
+    nmea_parser.reset_pos_priority()
+    # Satellite + voyage state
+    g_pos_source    = "---"
+    g_sat_count     = 0
+    g_sat_data      = ""
+    g_sat_used_list = ""
+    g_sat_used_n    = 0
+    g_fix_type      = "---"
+    g_pdop_str      = "---"
+    g_hdop_str      = "---"
+    g_vdop_str      = "---"
+    g_utc_time      = "--:--:--"
+    g_utc_date      = "--/--/----"
+    g_xte_mag       = "---"
+    g_xte_dir       = "-"
+    g_stw_str       = "---"
+    g_nav_dest      = "---"
+    g_nav_bearing   = "---"
+    g_nav_dist      = "---"
+    g_nav_vmg       = "---"
+    g_nav_arrived   = "V"
+    g_apb_xte       = "---"
+    g_apb_xte_dir   = "-"
+    g_apb_dest      = "---"
+    g_apb_hts       = "---"
+    g_bod_bearing_t = "---"
+    g_bod_bearing_m = "---"
+    g_bod_dest      = "---"
+    g_bod_origin    = "---"
 
 # Return the AIS slot string for a given index (0–9).
 proc get_ais_slot(idx: int) -> str:
@@ -578,6 +772,207 @@ proc draw_ais_radar() -> void:
     else:
         forge.gui.draw_text("Awaiting position fix", cx - 68, cy - 6, 11, 60, 100, 65, 255)
 
+# ── satellite status tab ─────────────────────────────────────────────────────
+
+proc draw_satellite_tab() -> void:
+    var x: int = 10
+    var y: int = 284
+    var w: int = 780
+
+    # Background
+    forge.gui.draw_rect(x, y, w, 466, 8, 14, 26, 255)
+
+    # ── Fix quality summary row ───────────────────────────────────────────────
+    forge.gui.draw_text("FIX: " + g_fix_type,                                        x + 8,  y + 8, 13, 80, 220, 100, 255)
+    forge.gui.draw_text("IN VIEW: " + forge.str.from_int(g_sat_count),               x + 150, y + 8, 13, 180, 210, 180, 255)
+    forge.gui.draw_text("USED: " + forge.str.from_int(g_sat_used_n),                 x + 280, y + 8, 13, 180, 210, 180, 255)
+    forge.gui.draw_text("HDOP: " + g_hdop_str,                                       x + 380, y + 8, 13, 160, 195, 165, 255)
+    forge.gui.draw_text("VDOP: " + g_vdop_str,                                       x + 490, y + 8, 13, 160, 195, 165, 255)
+    forge.gui.draw_text("PDOP: " + g_pdop_str,                                       x + 600, y + 8, 13, 160, 195, 165, 255)
+    forge.gui.draw_line(x, y + 26, x + w, y + 26, 35, 75, 50, 255)
+
+    # ── SNR bar chart (up to 12 satellites) ──────────────────────────────────
+    var bar_base : int = y + 148    # baseline of bars
+    var bar_hmax : int = 110        # max bar height = SNR 50 → 110 px
+    var slot_w   : int = 63         # horizontal space per satellite
+    var bar_w    : int = 46
+
+    if forge.str.len(g_sat_data) > 0:
+        var sats: array = forge.str.split(g_sat_data, "|")
+        var ns  : int   = len(sats)
+        var si  : int   = 0
+        loop:
+            if si >= ns or si >= 12:
+                break
+            var flds: array = forge.str.split(sats[si], ":")
+            var prn : str   = "??"
+            var snrv: int   = 0
+            if len(flds) > 0:
+                prn  = flds[0]
+            if len(flds) > 3:
+                snrv = forge.str.to_int(flds[3])
+            var is_used: bool = forge.str.contains("|" + g_sat_used_list + "|", "|" + prn + "|")
+            var bx: int = x + 6 + si * slot_w
+            var bh: int = snrv * bar_hmax / 50
+            if bh > bar_hmax:
+                bh = bar_hmax
+            if is_used:
+                forge.gui.draw_rect(bx, bar_base - bh, bar_w, bh,  0, 190,  75, 255)
+            else:
+                forge.gui.draw_rect(bx, bar_base - bh, bar_w, bh, 50, 120,  90, 255)
+            forge.gui.draw_text(forge.str.from_int(snrv), bx + 12, bar_base - bh - 14, 10, 200, 230, 200, 255)
+            forge.gui.draw_text(prn,                      bx + 14, bar_base + 4,       10, 160, 190, 165, 255)
+            si = si + 1
+
+    # SNR scale labels
+    forge.gui.draw_text("50", x + w - 26, y + 33,  10, 70, 110, 80, 255)
+    forge.gui.draw_text("25", x + w - 26, y + 90,  10, 70, 110, 80, 255)
+    forge.gui.draw_text("0",  x + w - 20, y + 146, 10, 70, 110, 80, 255)
+    forge.gui.draw_line(x + w - 10, y + 30, x + w - 10, y + 148, 40, 70, 50, 255)
+
+    forge.gui.draw_line(x, bar_base + 18, x + w, bar_base + 18, 35, 75, 50, 255)
+
+    # ── Satellite detail table ────────────────────────────────────────────────
+    var ty: int = bar_base + 26
+    forge.gui.draw_text("PRN",  x + 14,  ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("ELEV", x + 72,  ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("AZIM", x + 128, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("SNR",  x + 186, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("USE",  x + 238, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("PRN",  x + 304, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("ELEV", x + 362, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("AZIM", x + 418, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("SNR",  x + 476, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_text("USE",  x + 528, ty, 11, 100, 160, 110, 255)
+    forge.gui.draw_line(x, ty + 14, x + w, ty + 14, 35, 70, 50, 255)
+
+    if forge.str.len(g_sat_data) > 0:
+        var sats2: array = forge.str.split(g_sat_data, "|")
+        var ns2  : int   = len(sats2)
+        var ri   : int   = 0
+        loop:
+            if ri >= ns2 or ri >= 12:
+                break
+            var flds2: array = forge.str.split(sats2[ri], ":")
+            var prn2 : str = "?"
+            var el2  : str = "?"
+            var az2  : str = "?"
+            var snr2 : str = "?"
+            if len(flds2) > 0:
+                prn2 = flds2[0]
+            if len(flds2) > 1:
+                el2  = flds2[1]
+            if len(flds2) > 2:
+                az2  = flds2[2]
+            if len(flds2) > 3:
+                snr2 = flds2[3]
+            var is_u2: bool = forge.str.contains("|" + g_sat_used_list + "|", "|" + prn2 + "|")
+            var col_x: int = x + 14
+            var row_y: int = ty + 20 + (ri % 6) * 16
+            if ri >= 6:
+                col_x = x + 304
+            var cr: int = 190
+            var cg: int = 225
+            var cb: int = 195
+            if is_u2:
+                cr = 80
+                cg = 240
+                cb = 110
+            forge.gui.draw_text(prn2, col_x,       row_y, 11, cr, cg, cb, 255)
+            forge.gui.draw_text(el2,  col_x + 58,  row_y, 11, cr, cg, cb, 255)
+            forge.gui.draw_text(az2,  col_x + 114, row_y, 11, cr, cg, cb, 255)
+            forge.gui.draw_text(snr2, col_x + 172, row_y, 11, cr, cg, cb, 255)
+            if is_u2:
+                forge.gui.draw_text("YES", col_x + 224, row_y, 11,  0, 220, 100, 255)
+            else:
+                forge.gui.draw_text("---", col_x + 224, row_y, 11, 70,  95,  75, 255)
+            ri = ri + 1
+
+    if forge.str.len(g_sat_data) == 0:
+        forge.gui.draw_text("No satellite data  —  awaiting GSV / GSA sentences",
+                            x + 160, y + 220, 13, 55, 90, 65, 255)
+
+# ── voyage data tab ───────────────────────────────────────────────────────────
+
+proc draw_voyage_tab() -> void:
+    var x: int = 10
+    var y: int = 284
+
+    # Background
+    forge.gui.draw_rect(x, y, 780, 466, 8, 14, 26, 255)
+
+    # ── UTC clock + position source ────────────────────────────────────────────
+    forge.gui.draw_text("UTC",           x + 8,   y + 10, 13, 100, 155, 220, 255)
+    forge.gui.draw_text(g_utc_time,      x + 55,  y + 4,  32, 255, 225, 70, 255)
+    forge.gui.draw_text(g_utc_date,      x + 255, y + 14, 16, 200, 175, 55, 255)
+    forge.gui.draw_text("POS SRC: " + g_pos_source, x + 455, y + 14, 13, 120, 175, 240, 255)
+    forge.gui.draw_line(x, y + 52, 790, y + 52, 38, 72, 130, 255)
+
+    # ── Water speed vs SOG ────────────────────────────────────────────────────
+    forge.gui.draw_text("WATER SPD (STW)", x + 8,   y + 60, 11, 100, 155, 220, 255)
+    forge.gui.draw_text(g_stw_str + " kts", x + 8,  y + 75, 22,  80, 210, 210, 255)
+    forge.gui.draw_text("SOG",            x + 185,  y + 60, 11, 100, 155, 220, 255)
+    forge.gui.draw_text(g_sog_str + " kts", x + 185, y + 75, 22, 100, 230, 130, 255)
+    forge.gui.draw_line(x, y + 108, 790, y + 108, 38, 72, 130, 255)
+
+    # ── Cross-track error + CDI bar ────────────────────────────────────────────
+    forge.gui.draw_text("CROSS-TRACK ERROR (XTE)", x + 8, y + 116, 11, 100, 155, 220, 255)
+    forge.gui.draw_text(g_xte_mag + " nm", x + 8, y + 130, 22, 255, 155, 55, 255)
+    if g_xte_dir == "L":
+        forge.gui.draw_text("STEER RIGHT", x + 130, y + 135, 13, 255, 200, 60, 255)
+    elif g_xte_dir == "R":
+        forge.gui.draw_text("STEER LEFT",  x + 130, y + 135, 13, 255, 200, 60, 255)
+    # CDI needle bar
+    var cdi_cx : int   = x + 540
+    var cdi_y  : int   = y + 118
+    var cdi_hw : int   = 140    # half-width (±1 nm)
+    var cdi_h  : int   = 26
+    forge.gui.draw_rect(cdi_cx - cdi_hw, cdi_y, cdi_hw * 2, cdi_h, 10, 18, 36, 255)
+    forge.gui.draw_rect_lines(cdi_cx - cdi_hw, cdi_y, cdi_hw * 2, cdi_h, 45, 85, 148, 255)
+    forge.gui.draw_line(cdi_cx, cdi_y, cdi_cx, cdi_y + cdi_h, 80, 130, 200, 255)
+    var xv  : float = forge.str.to_float(g_xte_mag)
+    if xv > 1.0:
+        xv = 1.0
+    var noff: int = forge.math.to_int(xv * float(cdi_hw))
+    if g_xte_dir == "L":
+        noff = 0 - noff
+    forge.gui.draw_rect(cdi_cx + noff - 4, cdi_y + 2, 8, cdi_h - 4, 255, 135, 35, 255)
+    forge.gui.draw_text("PORT", cdi_cx - cdi_hw + 4, cdi_y + 7, 10, 70, 100, 140, 255)
+    forge.gui.draw_text("STBD", cdi_cx + cdi_hw - 34, cdi_y + 7, 10, 70, 100, 140, 255)
+    forge.gui.draw_line(x, y + 156, 790, y + 156, 38, 72, 130, 255)
+
+    # ── Waypoint / RMB ────────────────────────────────────────────────────────
+    forge.gui.draw_text("WAYPOINT NAVIGATION", x + 8, y + 164, 11, 100, 155, 220, 255)
+    forge.gui.draw_text("DEST:",    x + 8,   y + 180, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_nav_dest, x + 55,  y + 180, 20, 255, 225, 70,  255)
+    forge.gui.draw_text("BRG:",     x + 200, y + 180, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_nav_bearing + "°", x + 240, y + 180, 20, 255, 225, 70, 255)
+    forge.gui.draw_text("DIST:",    x + 350, y + 180, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_nav_dist + " nm",  x + 395, y + 180, 20, 255, 225, 70, 255)
+    forge.gui.draw_text("VMG:",     x + 525, y + 180, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_nav_vmg + " kts",  x + 565, y + 180, 20, 255, 225, 70, 255)
+    if g_nav_arrived == "A":
+        forge.gui.draw_text("ARRIVED", x + 680, y + 180, 16, 0, 255, 120, 255)
+    forge.gui.draw_text("ROUTE:", x + 8, y + 212, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_bod_origin + " -> " + g_bod_dest,    x + 68,  y + 212, 16, 200, 200, 200, 255)
+    forge.gui.draw_text("BRG TRUE: " + g_bod_bearing_t + "°",  x + 310, y + 212, 13, 175, 195, 215, 255)
+    forge.gui.draw_text("MAG: " + g_bod_bearing_m + "°",       x + 490, y + 212, 13, 175, 195, 215, 255)
+    forge.gui.draw_line(x, y + 234, 790, y + 234, 38, 72, 130, 255)
+
+    # ── Autopilot / APB ───────────────────────────────────────────────────────
+    forge.gui.draw_text("AUTOPILOT  (APB)", x + 8, y + 242, 11, 100, 155, 220, 255)
+    forge.gui.draw_text("STEER TO:",        x + 8,   y + 258, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_apb_hts + "°",   x + 82,  y + 254, 28, 255, 175, 35,  255)
+    forge.gui.draw_text("DEST:",            x + 220, y + 258, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_apb_dest,         x + 265, y + 258, 20, 255, 225, 70,  255)
+    forge.gui.draw_text("XTE:",             x + 420, y + 258, 13, 155, 195, 235, 255)
+    forge.gui.draw_text(g_apb_xte + " nm " + g_apb_xte_dir, x + 455, y + 258, 20, 255, 155, 55, 255)
+
+    # No data hint
+    if g_utc_time == "--:--:--" and g_nav_dest == "---" and g_apb_hts == "---":
+        forge.gui.draw_text("No voyage data received yet  —  awaiting ZDA / RMB / APB sentences",
+                            x + 80, y + 340, 13, 50, 80, 110, 255)
+
 # ── settings panel ────────────────────────────────────────────────────────────
 
 proc cfg_path() -> str:
@@ -835,10 +1230,32 @@ proc main() -> void:
         draw_wind_rose(700, 54, 200, 200)
         draw_compass(900, 54, 300, 200)
 
-        # ── NMEA log + right column ───────────────────────────────────────────
+        # ── Left data panel — tabbed ──────────────────────────────────────────
         forge.gui.draw_line(0, 258, 1200, 258, 38, 72, 130, 255)
-        forge.gui.draw_text("NMEA LOG", 16, 260, 20, 70, 110, 165, 255)
-        forge.gui.log_draw(0)
+
+        # Tab selector buttons — active tab is brighter
+        var tr0: int = 30
+        var tr1: int = 30
+        var tr2: int = 30
+        if g_log_tab == 0:
+            tr0 = 65
+        if g_log_tab == 1:
+            tr1 = 65
+        if g_log_tab == 2:
+            tr2 = 65
+        if forge.gui.color_button( 10, 261, 118, 22, "NMEA LOG",    tr0, 100, 170, 255, 22, 50, 90, 255):
+            g_log_tab = 0
+        if forge.gui.color_button(136, 261, 118, 22, "SATELLITES",  tr1, 100, 170, 255, 22, 50, 90, 255):
+            g_log_tab = 1
+        if forge.gui.color_button(262, 261, 118, 22, "VOYAGE DATA", tr2, 100, 170, 255, 22, 50, 90, 255):
+            g_log_tab = 2
+
+        if g_log_tab == 0:
+            forge.gui.log_draw(0)
+        elif g_log_tab == 1:
+            draw_satellite_tab()
+        elif g_log_tab == 2:
+            draw_voyage_tab()
 
         draw_ais_panel()
         draw_ais_radar()
@@ -859,11 +1276,11 @@ proc main() -> void:
         forge.gui.draw_rect(0, 750, 1200, 50, 10, 18, 38, 255)
         if g_mode == "LIVE":
             if g_connected:
-                forge.gui.draw_text("LIVE  |  " + g_port_str + "  |  4800 baud", 20, 763, 12, 60, 210, 100, 255)
+                forge.gui.draw_text("LIVE  |  " + g_port_str + "  |  POS: " + g_pos_source + "  |  FIX: " + g_fix_type + "  |  Sats: " + forge.str.from_int(g_sat_used_n) + "/" + forge.str.from_int(g_sat_count), 20, 763, 12, 60, 210, 100, 255)
             else:
                 forge.gui.draw_text("LIVE  |  No serial connection  |  Press Settings to connect", 20, 763, 18, 80, 125, 175, 255)
         else:
-            forge.gui.draw_text("SIM MODE  |  Simulated NMEA data active", 20, 763, 18, 60, 200, 80, 255)
+            forge.gui.draw_text("SIM MODE  |  Simulated NMEA data  |  POS: " + g_pos_source + "  |  FIX: " + g_fix_type, 20, 763, 18, 60, 200, 80, 255)
 
         # Settings overlay (always drawn last — sits on top of everything)
         if g_settings_open:

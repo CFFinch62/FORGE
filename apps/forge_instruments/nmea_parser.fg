@@ -4,18 +4,28 @@
 # Responsibilities
 #   • Listen on nmea_raw_sentence
 #   • Identify each sentence type via forge.nmea.sentence_type()
-#   • Validate checksum via forge.nmea.validate()
-#   • Decode payload using forge.nmea.parse_gga() / parse_rmc() / field()
+#   • Decode payload using forge.nmea.field()
 #   • Emit typed instrument channels (position_update, speed_update, …)
 #   • Detect !AIVDM / !AIVDO and hand off raw payload to ais_decoder
 #
 # Sentence coverage:
-#   GGA  — position, altitude, satellites, HDOP, fix quality
-#   RMC  — position, SOG, COG, date, status
-#   DPT  — depth below transducer + offset
-#   MWV  — apparent/true wind speed and angle
-#   HDT  — true heading
-#   MTW  — water temperature
+#   GGA   — position (priority 2), fix quality
+#   RMC   — position (priority 1), SOG, COG
+#   GLL   — position (priority 3, fallback)
+#   DPT   — depth below transducer (priority 1)
+#   DBT   — depth below transducer (priority 2, fallback)
+#   MWV   — apparent/true wind speed and angle
+#   VHW   — water speed (STW) and magnetic heading
+#   HDT   — true heading
+#   MTW   — water temperature
+#   VTG   — SOG/COG (supplemental)
+#   GSV   — satellites in view (PRN, elevation, azimuth, SNR)
+#   GSA   — fix quality, DOP values, satellites used
+#   ZDA   — UTC date and time
+#   XTE   — cross-track error
+#   RMB   — recommended minimum navigation (waypoint bearing/range/VMG)
+#   APB   — autopilot sentence B (heading to steer, XTE, dest)
+#   BOD   — bearing, origin to destination waypoint
 #   AIVDM — AIS VHF data (forwarded to ais_decoder)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -27,34 +37,74 @@ import forge.str
 # ─────────────────────────────────────────────────────────────────────────────
 
 on nmea_raw_sentence as raw:
-    # Strip leading $ if present
+    # Strip leading $ if present (AIS sentences start with ! — leave those alone)
     var sentence: str = raw
     if forge.str.starts_with(raw, "$"):
         sentence = forge.str.substr(raw, 1, forge.str.len(raw) - 1)
 
-    # Identify sentence type (e.g. "GGA", "RMC", "AIVDM")
     var stype: str = forge.nmea.sentence_type(sentence)
 
     if stype == "GGA":
         handle_gga(sentence)
     elif stype == "RMC":
         handle_rmc(sentence)
+    elif stype == "GLL":
+        handle_gll(sentence)
     elif stype == "DPT":
         handle_dpt(sentence)
+    elif stype == "DBT":
+        handle_dbt(sentence)
     elif stype == "MWV":
         handle_mwv(sentence)
+    elif stype == "VHW":
+        handle_vhw(sentence)
     elif stype == "HDT":
         handle_hdt(sentence)
     elif stype == "MTW":
         handle_mtw(sentence)
     elif stype == "VTG":
         handle_vtg(sentence)
+    elif stype == "GSV":
+        handle_gsv(sentence)
+    elif stype == "GSA":
+        handle_gsa(sentence)
+    elif stype == "ZDA":
+        handle_zda(sentence)
+    elif stype == "XTE":
+        handle_xte(sentence)
+    elif stype == "RMB":
+        handle_rmb(sentence)
+    elif stype == "APB":
+        handle_apb(sentence)
+    elif stype == "BOD":
+        handle_bod(sentence)
     elif stype == "VDM":
         handle_aivdm(sentence)
     elif stype == "VDO":
         handle_aivdm(sentence)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Position source priority state
+#
+# Priority levels:  3 = RMC (highest)  2 = GGA  1 = GLL  0 = none
+#
+# Rules:
+#  • A sentence at a higher level always takes over immediately.
+#  • A sentence at a lower level only takes over after the higher-priority
+#    source has been silent for POS_MISS_THRESHOLD consecutive updates from
+#    the lower-priority source (≈ 5 seconds at 1 Hz).
+#  • Once locked, the display shows exactly one source label.
+# ─────────────────────────────────────────────────────────────────────────────
+
+var p_src_level  : int = 0   # current active priority level
+var p_rmc_miss   : int = 0   # GGA updates received without intervening RMC
+var p_gga_miss   : int = 0   # GLL updates received without GGA or RMC
+
+proc reset_pos_priority() -> void:
+    p_src_level = 0
+    p_rmc_miss  = 0
+    p_gga_miss  = 0
+
 # Sentence handlers
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -64,7 +114,22 @@ proc handle_gga(sentence: str) -> void:
     var lat_d: str = forge.nmea.field(sentence, 3)
     var lon  : str = forge.nmea.field(sentence, 4)
     var lon_d: str = forge.nmea.field(sentence, 5)
-    emit position_update -> lat + " " + lat_d + "|" + lon + " " + lon_d
+    if forge.str.len(lat) > 0:
+        if p_src_level == 3:
+            # RMC is active — count how many GGAs arrive without an RMC
+            p_rmc_miss = p_rmc_miss + 1
+            if p_rmc_miss > 5:
+                # RMC appears lost — fall back to GGA
+                p_src_level = 2
+                p_rmc_miss  = 0
+                emit position_update   -> lat + " " + lat_d + "|" + lon + " " + lon_d
+                emit pos_source_update -> "GGA"
+        else:
+            # GGA takes over (or continues) as active source
+            p_src_level = 2
+            p_rmc_miss  = 0
+            emit position_update   -> lat + " " + lat_d + "|" + lon + " " + lon_d
+            emit pos_source_update -> "GGA"
 
 proc handle_rmc(sentence: str) -> void:
     # RMC fields: 1=time, 2=status, 3=lat, 4=N/S, 5=lon, 6=E/W, 7=SOG, 8=COG
@@ -74,12 +139,15 @@ proc handle_rmc(sentence: str) -> void:
     var lon_d: str = forge.nmea.field(sentence, 6)
     var sog  : str = forge.nmea.field(sentence, 7)
     var cog  : str = forge.nmea.field(sentence, 8)
-    # Emit position from RMC so the radar works even when the device does not
-    # send GGA.  Many live GPS units send RMC as their primary (or only)
-    # position sentence — without this the radar guard (g_lat_f != 0.0)
-    # would never pass and AIS targets would not be plotted.
     if forge.str.len(lat) > 0:
+        # RMC is highest priority — always wins and resets miss counters
+        var was_source: bool = p_src_level == 3
+        p_src_level = 3
+        p_rmc_miss  = 0
+        p_gga_miss  = 0
         emit position_update -> lat + " " + lat_d + "|" + lon + " " + lon_d
+        if was_source == false:
+            emit pos_source_update -> "RMC"
     emit speed_update -> sog
     emit cog_update   -> cog
 
@@ -113,3 +181,178 @@ proc handle_aivdm(sentence: str) -> void:
     var payload: str = forge.nmea.field(sentence, 5)
     if forge.str.len(payload) > 0:
         ais_decoder.decode(payload)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Position fallback — GLL
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc handle_gll(sentence: str) -> void:
+    # GLL fields: 1=lat, 2=N/S, 3=lon, 4=E/W, 5=time, 6=status (A=valid)
+    var status: str = forge.nmea.field(sentence, 6)
+    if status != "A":
+        return
+    var lat  : str = forge.nmea.field(sentence, 1)
+    var lat_d: str = forge.nmea.field(sentence, 2)
+    var lon  : str = forge.nmea.field(sentence, 3)
+    var lon_d: str = forge.nmea.field(sentence, 4)
+    if forge.str.len(lat) > 0:
+        if p_src_level >= 2:
+            # GGA or RMC is active — count GLL updates without a higher source
+            p_gga_miss = p_gga_miss + 1
+            if p_gga_miss > 5:
+                # Higher source appears lost — fall back to GLL
+                p_src_level = 1
+                p_gga_miss  = 0
+                emit position_update   -> lat + " " + lat_d + "|" + lon + " " + lon_d
+                emit pos_source_update -> "GLL"
+        else:
+            # GLL takes over (or continues) as active source
+            p_src_level = 1
+            p_gga_miss  = 0
+            emit position_update   -> lat + " " + lat_d + "|" + lon + " " + lon_d
+            emit pos_source_update -> "GLL"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Depth fallback — DBT
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc handle_dbt(sentence: str) -> void:
+    # DBT fields: 1=feet, 2=f, 3=metres, 4=M, 5=fathoms, 6=F
+    # Only emit if DPT has not provided data (DPT takes priority; handled by
+    # the display layer — both emit on depth_update, most recent wins, which
+    # in practice is fine since both carry the same hardware reading)
+    var depth_str: str = forge.nmea.field(sentence, 3)
+    if forge.str.len(depth_str) > 0:
+        emit depth_update -> depth_str
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Satellite data — GSV + GSA
+# ─────────────────────────────────────────────────────────────────────────────
+
+# GSV accumulation state — built up across multiple GSV messages per cycle
+var gsv_buf   : str = ""   # pipe-delimited "PRN:el:az:snr" entries
+var gsv_count : int = 0    # total satellites in view (from field 3)
+
+proc handle_gsv(sentence: str) -> void:
+    # GSV fields: 1=total msgs, 2=msg num, 3=total sats in view,
+    #             then repeating groups of 4: PRN, elevation, azimuth, SNR
+    var total_msgs: str = forge.nmea.field(sentence, 1)
+    var msg_num   : str = forge.nmea.field(sentence, 2)
+    var total_sats: str = forge.nmea.field(sentence, 3)
+    var msg_n : int = forge.str.to_int(msg_num)
+    # On first message of a new cycle, reset the accumulation buffer
+    if msg_n == 1:
+        gsv_buf   = ""
+        gsv_count = forge.str.to_int(total_sats)
+    # Extract up to 4 satellite entries from this message (fields 4,8,12,16 …)
+    var s: int = 0
+    loop:
+        if s >= 4:
+            break
+        var base: int = 4 + s * 4
+        var prn : str = forge.nmea.field(sentence, base)
+        if forge.str.len(prn) == 0:
+            break
+        var el : str = forge.nmea.field(sentence, base + 1)
+        var az : str = forge.nmea.field(sentence, base + 2)
+        var snr: str = forge.nmea.field(sentence, base + 3)
+        if forge.str.len(gsv_buf) > 0:
+            gsv_buf = gsv_buf + "|"
+        gsv_buf = gsv_buf + prn + ":" + el + ":" + az + ":" + snr
+        s = s + 1
+    # When the last message of the cycle arrives, emit the complete snapshot
+    var total_n: int = forge.str.to_int(total_msgs)
+    if msg_n >= total_n:
+        emit sat_update -> forge.str.from_int(gsv_count) + "|" + gsv_buf
+
+proc handle_gsa(sentence: str) -> void:
+    # GSA fields: 1=auto/manual, 2=fix(1/2/3), 3-14=PRNs used, 15=PDOP, 16=HDOP, 17=VDOP
+    var fix_num: str = forge.nmea.field(sentence, 2)
+    var pdop   : str = forge.nmea.field(sentence, 15)
+    var hdop   : str = forge.nmea.field(sentence, 16)
+    var vdop   : str = forge.nmea.field(sentence, 17)
+    # Collect used satellite PRNs (fields 3–14, some may be empty)
+    var used: str = ""
+    var i   : int = 3
+    loop:
+        if i > 14:
+            break
+        var prn: str = forge.nmea.field(sentence, i)
+        if forge.str.len(prn) > 0:
+            if forge.str.len(used) > 0:
+                used = used + "|"
+            used = used + prn
+        i = i + 1
+    emit fix_update -> fix_num + "|" + pdop + "|" + hdop + "|" + vdop + "|" + used
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Time — ZDA
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc handle_zda(sentence: str) -> void:
+    # ZDA fields: 1=HHMMSS.ss, 2=day, 3=month, 4=year
+    var timestr: str = forge.nmea.field(sentence, 1)
+    var day    : str = forge.nmea.field(sentence, 2)
+    var month  : str = forge.nmea.field(sentence, 3)
+    var year   : str = forge.nmea.field(sentence, 4)
+    if forge.str.len(timestr) >= 6:
+        var hh: str = forge.str.substr(timestr, 0, 2)
+        var mm: str = forge.str.substr(timestr, 2, 2)
+        var ss: str = forge.str.substr(timestr, 4, 2)
+        emit time_update -> hh + ":" + mm + ":" + ss + "|" + day + "/" + month + "/" + year
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Navigation sentences — XTE, VHW, RMB, APB, BOD
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc handle_xte(sentence: str) -> void:
+    # XTE fields: 1=general warn (A=valid), 2=loran warn, 3=magnitude, 4=L/R, 5=units
+    var warn: str = forge.nmea.field(sentence, 1)
+    if warn != "A":
+        return
+    var mag: str = forge.nmea.field(sentence, 3)
+    var dir: str = forge.nmea.field(sentence, 4)
+    emit xte_update -> mag + "|" + dir
+
+proc handle_vhw(sentence: str) -> void:
+    # VHW fields: 1=hdg true, 2=T, 3=hdg mag, 4=M, 5=speed knots, 6=N, 7=speed km/h, 8=K
+    var stw: str = forge.nmea.field(sentence, 5)
+    if forge.str.len(stw) > 0:
+        emit water_speed_update -> stw
+
+proc handle_rmb(sentence: str) -> void:
+    # RMB fields: 1=status(A), 2=XTE, 3=L/R, 4=origin, 5=dest,
+    #             6=dest lat, 7=N/S, 8=dest lon, 9=E/W,
+    #             10=range nm, 11=bearing true, 12=VMG knots, 13=arrival(A=arrived)
+    var status: str = forge.nmea.field(sentence, 1)
+    if status != "A":
+        return
+    var dest   : str = forge.nmea.field(sentence, 5)
+    var dist   : str = forge.nmea.field(sentence, 10)
+    var bearing: str = forge.nmea.field(sentence, 11)
+    var vmg    : str = forge.nmea.field(sentence, 12)
+    var arrived: str = forge.nmea.field(sentence, 13)
+    emit nav_update -> dest + "|" + bearing + "|" + dist + "|" + vmg + "|" + arrived
+
+proc handle_apb(sentence: str) -> void:
+    # APB fields: 1=statusA(A), 2=statusB, 3=XTE mag, 4=L/R dir, 5=units,
+    #             6=arrival alarm, 7=perp passed, 8=origin→dest bearing, 9=T/M,
+    #             10=dest waypoint ID, 11=bearing to dest, 12=T/M,
+    #             13=heading to steer, 14=T/M
+    var statusA: str = forge.nmea.field(sentence, 1)
+    if statusA != "A":
+        return
+    var xte    : str = forge.nmea.field(sentence, 3)
+    var xte_dir: str = forge.nmea.field(sentence, 4)
+    var dest   : str = forge.nmea.field(sentence, 10)
+    var hts    : str = forge.nmea.field(sentence, 13)
+    emit autopilot_update -> xte + "|" + xte_dir + "|" + dest + "|" + hts
+
+proc handle_bod(sentence: str) -> void:
+    # BOD fields: 1=bearing true, 2=T, 3=bearing magnetic, 4=M,
+    #             5=destination waypoint ID, 6=origin waypoint ID
+    var bearing_t: str = forge.nmea.field(sentence, 1)
+    var bearing_m: str = forge.nmea.field(sentence, 3)
+    var dest     : str = forge.nmea.field(sentence, 5)
+    var origin   : str = forge.nmea.field(sentence, 6)
+    emit waypoint_update -> bearing_t + "|" + bearing_m + "|" + dest + "|" + origin

@@ -243,6 +243,14 @@ make test
 
 ---
 
+## 🚢 Real-World Example Applications
+
+FORGE includes example applications that demonstrate real-world capability beyond teaching exercises. The NMEA 0183 Marine Instruments app parses live serial data from marine electronics and displays navigation instruments including compass heading, GPS position, speed, and wind data.
+
+![NMEA 0183 Marine Instruments — Built with FORGE](images/Forge_Instruments_Screenshot.png)
+
+---
+
 ## 📄 License
 
 FORGE is released under the [MIT License](LICENSE).
