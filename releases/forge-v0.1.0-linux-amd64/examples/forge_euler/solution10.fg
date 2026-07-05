@@ -1,0 +1,33 @@
+# Project Euler - Problem 10: Summation of Primes
+#
+# The sum of the primes below 10 is 2 + 3 + 5 + 7 = 17.
+#
+# Find the sum of all the primes below two million.
+# Answer: 142913828922
+
+proc main() -> void:
+    var limit: int = 2000000
+    var total: int = 0
+
+    # Use a sieve of Eratosthenes
+    # sieve[i] = 0 means prime, 1 means composite
+    with alloc(int, 2000000) as sieve:
+        # Mark composites starting from 2
+        var i: int = 2
+        while i * i < limit:
+            if sieve[i] == 0:
+                var j: int = i * i
+                while j < limit:
+                    sieve[j] = 1
+                    j += i
+            i += 1
+
+        # Sum all primes
+        var k: int = 2
+        while k < limit:
+            if sieve[k] == 0:
+                total += k
+            k += 1
+
+    print("Project Euler - Problem 10")
+    print("Sum of all primes below 2,000,000: " + str(total))

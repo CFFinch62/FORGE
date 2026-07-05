@@ -4,12 +4,15 @@ Provides a code editor with line numbers and syntax highlighting
 """
 
 from PyQt6.QtWidgets import QPlainTextEdit, QWidget, QTextEdit, QTabWidget
-from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QTextFormat, QFont, QTextCursor
+from PyQt6.QtCore import Qt, QRect, QRectF, QSize, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QPainter, QColor, QTextFormat, QFont, QTextCursor, QPainterPath,
+)
 
 from forge_ide.app.syntax import PlainHighlighter
 from forge_ide.app.themes import UITheme, SyntaxColors
 from forge_ide.app.settings import SettingsManager
+from forge_ide.app.block_structure import compute_scopes, line_opens_block
 
 
 class LineNumberArea(QWidget):
@@ -40,6 +43,14 @@ class CodeEditor(QPlainTextEdit):
         self.file_path = None
         self._modified = False
 
+        # Nested scope boxes: (start_line, end_line, depth) tuples, recomputed
+        # on a debounce timer as the document changes (see _on_text_changed).
+        self._scopes: list = []
+        self._scope_timer = QTimer(self)
+        self._scope_timer.setSingleShot(True)
+        self._scope_timer.setInterval(200)
+        self._scope_timer.timeout.connect(self._recompute_scopes)
+
         # Create line number area
         self.line_number_area = LineNumberArea(self)
 
@@ -56,6 +67,7 @@ class CodeEditor(QPlainTextEdit):
         self.update_line_number_area_width(0)
         self.highlight_current_line()
         self.apply_settings()
+        self._recompute_scopes()
     
     def apply_settings(self):
         """Apply editor settings"""
@@ -174,30 +186,10 @@ class CodeEditor(QPlainTextEdit):
                 
                 # Calculate indentation of previous line
                 indent = len(prev_text) - len(prev_text.lstrip())
-                
-                # If previous line ends with ':', increase indent (for imports/records)
-                # OR if it starts with a block keyword (if, loop, task, etc.)
-                should_indent = False
-                
-                # Check for colons (imports, records)
-                if prev_text.endswith(':'):
-                    should_indent = True
-                else:
-                    # Check for keywords
-                    # Split into words to check first word
-                    parts = prev_text.strip().split()
-                    if parts:
-                        keyword = parts[0]
-                        block_keywords = {'task', 'loop', 'choose', 'choice', 'default', 'attempt', 'handle', 'ensure', 'record', 'else'}
-                        if keyword in block_keywords:
-                            should_indent = True
-                        elif keyword == 'if':
-                             # Only indent 'if' if it's not a single-line 'if ... then ...'
-                             # Heuristic: check if 'then' is present
-                             if ' then ' not in prev_text and not prev_text.endswith(' then'):
-                                 should_indent = True
 
-                if should_indent:
+                # Shared with the scope-box renderer, so auto-indent and the
+                # visual nested boxes always agree on where a block starts.
+                if line_opens_block(prev_text):
                     indent += 4
                 
                 # Apply indentation
@@ -210,9 +202,96 @@ class CodeEditor(QPlainTextEdit):
         """Handle resize events"""
         super().resizeEvent(event)
         cr = self.contentsRect()
-        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), 
+        self.line_number_area.setGeometry(QRect(cr.left(), cr.top(),
                                                  self.line_number_area_width(), cr.height()))
-    
+
+    def _recompute_scopes(self):
+        """Recompute nested scope ranges from the current document text.
+
+        Runs on a debounce timer (see _on_text_changed), not on every
+        keystroke. Never raises: this must keep working on mid-edit,
+        syntactically broken code.
+        """
+        try:
+            self._scopes = compute_scopes(self.toPlainText())
+        except Exception:
+            self._scopes = []
+        self.viewport().update()
+
+    def _scope_boxes_enabled(self) -> bool:
+        """Whether nested scope boxes should currently be drawn"""
+        if self.settings and self.settings.settings.editor:
+            return getattr(self.settings.settings.editor, "show_scope_boxes", True)
+        return True
+
+    def paintEvent(self, event):
+        """Paint nested scope boxes behind the text, then the text on top"""
+        if self.ui_theme and self._scopes and self._scope_boxes_enabled():
+            self._paint_scope_boxes()
+        super().paintEvent(event)
+
+    def _paint_scope_boxes(self):
+        """Draw nested, colored, rounded boxes behind the text based on
+        block nesting depth (BlueJ-style scope highlighting).
+
+        Boxes are drawn BEFORE the text (paintEvent calls this, then calls
+        super().paintEvent() afterward) so that syntax-highlighted text,
+        the current-line highlight, and bracket-match highlighting all
+        render crisply on top of the tinted backgrounds, unaffected.
+        """
+        colors = None
+        if self.settings and self.settings.settings.editor:
+            colors = self.settings.settings.editor.scope_box_colors
+        if not colors:
+            colors = getattr(self.ui_theme, "scope_depth_colors", None)
+        if not colors:
+            return
+
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        left_margin = 4
+        inset_per_depth = 7
+        fill_alpha = 120
+        border_alpha = 210
+        viewport_height = self.viewport().height()
+        viewport_width = self.viewport().width()
+
+        # Shallow (outer) scopes first so deeper ones paint on top and
+        # visually read as nested/inset rather than overlapping flatly.
+        for start_line, end_line, depth in sorted(self._scopes, key=lambda s: s[2]):
+            start_block = self.document().findBlockByNumber(start_line)
+            end_block = self.document().findBlockByNumber(end_line)
+            if not start_block.isValid() or not end_block.isValid():
+                continue
+
+            top = self.blockBoundingGeometry(start_block).translated(self.contentOffset()).top()
+            bottom = self.blockBoundingGeometry(end_block).translated(self.contentOffset()).bottom()
+
+            # Skip boxes that are entirely scrolled out of view.
+            if bottom < 0 or top > viewport_height:
+                continue
+
+            x = left_margin + depth * inset_per_depth
+            width = viewport_width - 2 * x
+            if width <= 0:
+                continue
+
+            rect = QRectF(x, top + 1, width, bottom - top - 2)
+            path = QPainterPath()
+            path.addRoundedRect(rect, 6, 6)
+
+            color = QColor(colors[depth % len(colors)])
+            color.setAlpha(fill_alpha)
+            painter.fillPath(path, color)
+
+            border = QColor(color)
+            border.setAlpha(border_alpha)
+            painter.setPen(border)
+            painter.drawPath(path)
+
+        painter.end()
+
     def line_number_area_paint_event(self, event):
         """Paint line numbers in the gutter"""
         painter = QPainter(self.line_number_area)
@@ -349,6 +428,12 @@ class CodeEditor(QPlainTextEdit):
         if not self.isReadOnly() and self.ui_theme and should_highlight:
             selection = QTextEdit.ExtraSelection()
             line_color = QColor(self.ui_theme.editor_line_highlight)
+            # Translucent, not opaque: an opaque fill here would completely
+            # paint over the nested scope box on whichever line the cursor
+            # sits on (extra selections are drawn by super().paintEvent(),
+            # which runs after _paint_scope_boxes()), making scope coloring
+            # look broken on the exact line the user is looking at.
+            line_color.setAlpha(140)
             selection.format.setBackground(line_color)
             selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
             selection.cursor = self.textCursor()
@@ -367,7 +452,11 @@ class CodeEditor(QPlainTextEdit):
         if not self._modified:
             self._modified = True
             self.file_modified.emit(True)
-    
+
+        # Recompute scope boxes a short moment after the user stops typing,
+        # rather than on every keystroke.
+        self._scope_timer.start()
+
     def set_modified(self, modified: bool):
         """Set the modified state"""
         self._modified = modified

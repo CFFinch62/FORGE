@@ -1,0 +1,46 @@
+# Test all bitwise compound assignment operators fixed in this session:
+#   &=   |=   ^=   <<=   >>=
+# Also confirms the arithmetic ones still work.
+
+proc main() -> void:
+    # --- Arithmetic (should already work) ---
+    var a: int = 10
+    a += 5
+    print("+=  : 10 += 5  = " + str(a))   # 15
+
+    var b: int = 10
+    b -= 3
+    print("-=  : 10 -= 3  = " + str(b))   # 7
+
+    var c: int = 4
+    c *= 3
+    print("*=  : 4  *= 3  = " + str(c))   # 12
+
+    var d: int = 20
+    d /= 4
+    print("/=  : 20 /= 4  = " + str(d))   # 5
+
+    var e: int = 17
+    e %= 5
+    print("%=  : 17 %= 5  = " + str(e))   # 2
+
+    # --- Bitwise (newly fixed) ---
+    var f: int = 12
+    f &= 10
+    print("&=  : 12 &= 10 = " + str(f))   # 8
+
+    var g: int = 12
+    g |= 3
+    print("|=  : 12 |= 3  = " + str(g))   # 15
+
+    var h: int = 15
+    h ^= 5
+    print("^=  : 15 ^= 5  = " + str(h))   # 10
+
+    var i: int = 1
+    i <<= 3
+    print("<<= : 1 <<= 3  = " + str(i))   # 8
+
+    var j: int = 64
+    j >>= 2
+    print(">>= : 64 >>= 2 = " + str(j))   # 16

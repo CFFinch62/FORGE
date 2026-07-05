@@ -1,0 +1,29 @@
+# Project Euler - Problem 5: Smallest Multiple
+#
+# 2520 is the smallest number that can be divided by each of the numbers
+# from 1 to 10 without any remainder.
+#
+# What is the smallest positive number that is evenly divisible by all
+# of the numbers from 1 to 20?
+# Answer: 232792560
+
+proc gcd(a: int, b: int) -> int:
+    var x: int = a
+    var y: int = b
+    while y != 0:
+        var t: int = y
+        y = x % y
+        x = t
+    return x
+
+proc lcm(a: int, b: int) -> int:
+    return a / gcd(a, b) * b
+
+proc main() -> void:
+    var result: int = 1
+    var i: int = 2
+    while i <= 20:
+        result = lcm(result, i)
+        i += 1
+    print("Project Euler - Problem 5")
+    print("Smallest number divisible by 1 to 20: " + str(result))

@@ -27,6 +27,12 @@ class EditorSettings:
     word_wrap: bool = False
     highlight_current_line: bool = True
     bracket_matching: bool = True
+    show_scope_boxes: bool = True
+    # User-chosen override for nested scope box colors, indexed by nesting
+    # depth. Empty means "use the current UI theme's scope_depth_colors"
+    # instead -- this lets a theme's defaults keep working for anyone who
+    # never opens the color pickers.
+    scope_box_colors: List[str] = field(default_factory=list)
 
 
 @dataclass

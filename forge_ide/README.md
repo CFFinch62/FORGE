@@ -8,6 +8,7 @@ A modern, feature-rich IDE for the FORGE programming language.
 
 - **Syntax Highlighting** - Color-coded FORGE syntax with support for keywords, types, operators, and comments
 - **Code Editor** - Modern editing with line numbers, auto-indent, and code folding
+- **Nested Scope Coloring** - BlueJ-style colored backgrounds showing block nesting at a glance
 - **File Browser** - Navigate and manage your FORGE project files
 - **Bookmarks** - Mark and navigate important code locations
 - **Find/Replace** - Powerful search and replace across files
@@ -83,6 +84,30 @@ python -m forge_ide.main
 | Find | `Ctrl+F` | `Cmd+F` |
 | Replace | `Ctrl+H` | `Cmd+H` |
 | Comment/Uncomment | `Ctrl+/` | `Cmd+/` |
+
+### Nested Scope Coloring
+
+The editor paints nested, colored backgrounds behind each block of
+code — similar to BlueJ — so you can see where a `proc`, `if`, `while`,
+`for`, etc. body starts and ends just by looking at the background,
+instead of only inferring it from indentation. Each level of nesting
+gets its own color, drawn behind the syntax-highlighted text, and
+recomputes automatically a moment after you stop typing.
+
+**To toggle it on or off:**
+
+- **View** menu → **Show Nested Scope Coloring**, or
+- **Settings → Preferences** (`Ctrl+,`) → **Editor** tab → **"Show nested scope boxes"**
+
+Both controls stay in sync with each other.
+
+**To customize the colors:**
+
+1. Open **Settings → Preferences** (`Ctrl+,`) → **Editor** tab
+2. Under **Nested Scope Coloring**, click a depth's color swatch to open a color picker and choose a custom color for that nesting level
+3. Click **Reset to Theme Defaults** at any time to go back to the colors defined by your current UI theme
+
+If you never customize the colors, they automatically follow whichever UI theme you have selected (**View → Theme → UI Theme**), so switching themes keeps the scope colors looking coherent with the rest of the IDE.
 
 ## Troubleshooting
 

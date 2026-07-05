@@ -1,0 +1,89 @@
+# forge_gui_template.fg — Basic FORGE GUI App Template
+#
+# A starting point for GUI applications using forge.gui.
+# Includes a main scrollable log panel and a sidebar log panel.
+#
+# Build:  make GUI=1
+# Run:    ./forge run examples/gui_apps/forge_gui_template.fg
+
+import forge.gui
+import forge.str
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Layout constants
+var WIN_W: int = 900
+var WIN_H: int = 650
+var TOOLBAR_Y: int = 8
+var LOG_X: int = 10
+var LOG_Y: int = 50
+var LOG_W: int = 700
+var LOG_H: int = 450
+var SIDEBAR_X: int = 720
+var SIDEBAR_Y: int = 70
+var SIDEBAR_W: int = 170
+var STATUS_Y: int = 600
+var INPUT_Y: int = 550
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc main() -> void:
+    gui.init_window(WIN_W, WIN_H, "FORGE GUI APP")
+    gui.set_target_fps(60)
+    gui.set_style_dark()
+
+    var font_id: int = gui.load_font("/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf", 22)
+    if font_id >= 0:
+        gui.set_font(font_id)
+
+    # ── Create log panels (must be done before the main loop) ──
+    # log_create(id, x, y, width, height, max_chars, font_size)
+    gui.log_create(0, LOG_X, LOG_Y, LOG_W, LOG_H, 4096, 16)
+    gui.log_create(1, SIDEBAR_X, SIDEBAR_Y, SIDEBAR_W, 300, 1024, 16)
+
+    # ── Seed the panels with some initial content ──
+    gui.log_add(0, "Main panel ready.", 0, 255, 100, 255)
+    gui.log_add(1, "Sidebar ready.", 200, 200, 255, 255)
+
+    # ── Main Loop ──
+
+    while gui.window_open():
+        gui.begin_draw()
+        gui.clear(30, 30, 35, 255)
+
+        # ── Title Bar ──
+        gui.draw_rect(0, 0, WIN_W, 42, 25, 55, 95, 255)
+        gui.draw_text("FORGE GUI APP", 10, 10, 22, 255, 255, 255, 255)
+
+        # FPS display
+        gui.draw_text("FPS: " + str(gui.get_fps()), WIN_W - 80, 14, 14, 150, 150, 150, 255)
+
+        # ── Toolbar Buttons ──
+        var btn_y: int = LOG_Y + LOG_H + 8
+
+        # Add your toolbar buttons here, e.g.:
+        # if gui.color_button(10, btn_y, 80, 30, "Action", 80, 80, 90, 255, 220, 220, 220, 255):
+        #     gui.log_add(0, "Button pressed", 255, 200, 0, 255)
+
+        # ── Draw Main Log Panel ──
+        gui.log_draw(0)
+
+        # ── Draw Sidebar ──
+        gui.draw_text("SIDEBAR", SIDEBAR_X + 20, SIDEBAR_Y - 20, 16, 200, 200, 255, 255)
+        gui.log_draw(1)
+
+        # ── Status Bar ──
+        gui.draw_rect(0, STATUS_Y, WIN_W, 50, 20, 20, 25, 255)
+        gui.draw_line(0, STATUS_Y, WIN_W, STATUS_Y, 60, 60, 80, 255)
+
+        var status: str = "Ready"
+        gui.draw_text(status, 10, STATUS_Y + 8, 14, 160, 160, 160, 255)
+
+        gui.end_draw()
+
+    gui.close_window()
+

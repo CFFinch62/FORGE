@@ -7,10 +7,10 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
     QLabel, QSpinBox, QCheckBox, QComboBox, QLineEdit,
     QPushButton, QGroupBox, QFormLayout, QTreeWidget, QTreeWidgetItem,
-    QHeaderView, QFontComboBox, QFileDialog
+    QHeaderView, QFontComboBox, QFileDialog, QColorDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFontDatabase
+from PyQt6.QtGui import QFontDatabase, QColor
 
 from forge_ide.app.settings import SettingsManager
 from forge_ide.app.themes import ThemeManager
@@ -50,6 +50,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings_manager = settings
         self.theme_manager = theme_manager
+        self._scope_color_override = []
         self.setWindowTitle("Preferences")
         self.setMinimumSize(500, 450)
         self._setup_ui()
@@ -144,6 +145,33 @@ class SettingsDialog(QDialog):
         behavior_group.setLayout(behavior_layout)
         layout.addWidget(behavior_group)
 
+        # Nested scope coloring group
+        scope_group = QGroupBox("Nested Scope Coloring")
+        scope_layout = QVBoxLayout()
+
+        self.scope_boxes_check = QCheckBox("Show nested scope boxes")
+        scope_layout.addWidget(self.scope_boxes_check)
+
+        colors_row = QHBoxLayout()
+        colors_row.addWidget(QLabel("Depth colors:"))
+        self._scope_color_buttons = []
+        for depth in range(4):
+            btn = QPushButton()
+            btn.setFixedSize(32, 22)
+            btn.setToolTip(f"Depth {depth + 1} color")
+            btn.clicked.connect(lambda checked, d=depth: self._pick_scope_color(d))
+            colors_row.addWidget(btn)
+            self._scope_color_buttons.append(btn)
+        colors_row.addStretch()
+        scope_layout.addLayout(colors_row)
+
+        reset_scope_btn = QPushButton("Reset to Theme Defaults")
+        reset_scope_btn.clicked.connect(self._reset_scope_colors)
+        scope_layout.addWidget(reset_scope_btn)
+
+        scope_group.setLayout(scope_layout)
+        layout.addWidget(scope_group)
+
         layout.addStretch()
         return tab
 
@@ -187,6 +215,9 @@ class SettingsDialog(QDialog):
         self._update_preview()
         self.ui_theme_combo.currentIndexChanged.connect(self._update_preview)
         self.syntax_theme_combo.currentIndexChanged.connect(self._update_preview)
+        # Keep the scope-color swatches (Editor tab) in sync with whichever
+        # UI theme is selected here, for anyone who hasn't customized them.
+        self.ui_theme_combo.currentIndexChanged.connect(self._update_scope_color_buttons)
         preview_layout.addWidget(self.preview_label)
         
         preview_group.setLayout(preview_layout)
@@ -321,6 +352,13 @@ class SettingsDialog(QDialog):
         self.highlight_line_check.setChecked(s.editor.highlight_current_line)
         self.bracket_matching_check.setChecked(s.editor.bracket_matching)
 
+        self.scope_boxes_check.setChecked(s.editor.show_scope_boxes)
+        # Empty override means "inherit from the current UI theme" -- keep
+        # that distinction in memory so switching themes later keeps
+        # driving the colors for anyone who never customizes them.
+        self._scope_color_override = list(s.editor.scope_box_colors)
+        self._update_scope_color_buttons()
+
         # Theme - load both UI and syntax themes
         ui_theme = getattr(s.theme, 'ui_theme', s.theme.current_theme)
         syntax_theme = getattr(s.theme, 'syntax_theme', 'default')
@@ -390,6 +428,9 @@ class SettingsDialog(QDialog):
         s.editor.highlight_current_line = self.highlight_line_check.isChecked()
         s.editor.bracket_matching = self.bracket_matching_check.isChecked()
 
+        s.editor.show_scope_boxes = self.scope_boxes_check.isChecked()
+        s.editor.scope_box_colors = list(self._scope_color_override)
+
         # Theme - save both UI and syntax themes
         new_ui_theme = self.ui_theme_combo.currentData()
         new_syntax_theme = self.syntax_theme_combo.currentData()
@@ -415,6 +456,44 @@ class SettingsDialog(QDialog):
 
         # Emit signal so main window can apply settings immediately
         self.settings_applied.emit()
+
+    def _current_theme_scope_defaults(self) -> list:
+        """Scope depth colors of the UI theme currently selected in this dialog"""
+        theme_name = self.ui_theme_combo.currentData()
+        ui_theme = self.theme_manager.get_ui_theme(theme_name) if theme_name else \
+            self.theme_manager.get_current_ui_theme()
+        return list(getattr(ui_theme, "scope_depth_colors", []))
+
+    def _update_scope_color_buttons(self):
+        """Refresh the color swatch buttons from the override (or theme defaults)"""
+        colors = self._scope_color_override or self._current_theme_scope_defaults()
+        for i, btn in enumerate(self._scope_color_buttons):
+            color = colors[i % len(colors)] if colors else "#888888"
+            btn.setStyleSheet(
+                f"background-color: {color}; border: 1px solid #00000040; border-radius: 3px;"
+            )
+
+    def _pick_scope_color(self, depth: int):
+        """Open a color picker for one nesting depth and store the override"""
+        colors = self._scope_color_override or self._current_theme_scope_defaults()
+        current = QColor(colors[depth % len(colors)]) if colors else QColor("#888888")
+
+        chosen = QColorDialog.getColor(current, self, f"Depth {depth + 1} Scope Color")
+        if not chosen.isValid():
+            return
+
+        if not self._scope_color_override:
+            self._scope_color_override = self._current_theme_scope_defaults()
+        # Grow the list if the theme has fewer depths than the button being edited
+        while len(self._scope_color_override) <= depth:
+            self._scope_color_override.append("#888888")
+        self._scope_color_override[depth] = chosen.name()
+        self._update_scope_color_buttons()
+
+    def _reset_scope_colors(self):
+        """Clear the override so scope colors follow the UI theme again"""
+        self._scope_color_override = []
+        self._update_scope_color_buttons()
 
     def _auto_detect_terminal(self):
         """Auto-detect the best external terminal command"""

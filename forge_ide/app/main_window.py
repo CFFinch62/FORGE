@@ -234,6 +234,12 @@ class ForgeIDEMainWindow(QMainWindow):
         toggle_terminal.triggered.connect(self._toggle_terminal)
         view_menu.addAction(toggle_terminal)
 
+        self.toggle_scope_boxes_action = QAction("Show Nested Scope Coloring", self)
+        self.toggle_scope_boxes_action.setCheckable(True)
+        self.toggle_scope_boxes_action.setChecked(self.settings.settings.editor.show_scope_boxes)
+        self.toggle_scope_boxes_action.triggered.connect(self._toggle_scope_boxes)
+        view_menu.addAction(self.toggle_scope_boxes_action)
+
         view_menu.addSeparator()
 
         # Theme submenu - now shows UI themes and syntax themes
@@ -763,7 +769,14 @@ class ForgeIDEMainWindow(QMainWindow):
     def _toggle_terminal(self):
         """Toggle terminal visibility"""
         self.terminal.setVisible(not self.terminal.isVisible())
-    
+
+    def _toggle_scope_boxes(self, checked: bool):
+        """Toggle nested scope box coloring on/off from the View menu"""
+        self.settings.settings.editor.show_scope_boxes = checked
+        self.settings.save()
+        for editor in self.editors.values():
+            editor.apply_settings()
+
     def _set_terminal_position(self, position: str):
         """Set terminal position to 'bottom' or 'right'"""
         if position not in ["bottom", "right"]:
@@ -855,6 +868,10 @@ class ForgeIDEMainWindow(QMainWindow):
         # Apply changed settings to all editors
         for editor in self.editors.values():
             editor.apply_settings()
+
+        # Keep the View menu toggle in sync in case it was changed from
+        # the Preferences dialog instead of the menu item.
+        self.toggle_scope_boxes_action.setChecked(self.settings.settings.editor.show_scope_boxes)
 
         # Apply terminal settings
         self.terminal.apply_settings()

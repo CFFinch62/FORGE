@@ -5,8 +5,8 @@ Handles loading and applying UI themes and syntax themes separately
 
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, field
 from configparser import ConfigParser
 
 
@@ -197,6 +197,14 @@ class UITheme:
     error: str
     info: str
 
+    # Colors for nested scope boxes, indexed by nesting depth (cycles if
+    # nesting goes deeper than the list). Plain RGB hex, no alpha -- the
+    # editor applies a shared alpha value at paint time so all themes stay
+    # consistent in how "solid" the boxes look.
+    scope_depth_colors: List[str] = field(default_factory=lambda: [
+        "#f9c74f", "#577590", "#90be6d", "#9b5de5",
+    ])
+
 
 # Built-in UI Themes
 DARK_UI_THEME = UITheme(
@@ -237,6 +245,7 @@ DARK_UI_THEME = UITheme(
     warning="#f9e2af",
     error="#f38ba8",
     info="#89b4fa",
+    scope_depth_colors=["#f9e2af", "#89b4fa", "#a6e3a1", "#cba6f7"],
 )
 
 
@@ -278,6 +287,7 @@ LIGHT_UI_THEME = UITheme(
     warning="#df8e1d",
     error="#d20f39",
     info="#1e66f5",
+    scope_depth_colors=["#df8e1d", "#1e66f5", "#40a02b", "#8839ef"],
 )
 
 
@@ -319,6 +329,7 @@ GREY_UI_THEME = UITheme(
     warning="#d5b778",
     error="#c75450",
     info="#4a9eff",
+    scope_depth_colors=["#d5b778", "#4a9eff", "#6aab73", "#b58ee0"],
 )
 
 
@@ -360,6 +371,7 @@ SOLARIZED_LIGHT_UI_THEME = UITheme(
     warning="#b58900",
     error="#dc322f",
     info="#268bd2",
+    scope_depth_colors=["#b58900", "#268bd2", "#859900", "#6c71c4"],
 )
 
 
@@ -401,6 +413,7 @@ SOLARIZED_DARK_UI_THEME = UITheme(
     warning="#b58900",
     error="#dc322f",
     info="#268bd2",
+    scope_depth_colors=["#b58900", "#268bd2", "#859900", "#6c71c4"],
 )
 
 
@@ -442,6 +455,7 @@ HIGH_CONTRAST_UI_THEME = UITheme(
     warning="#ffff00",
     error="#ff0000",
     info="#00d4ff",
+    scope_depth_colors=["#ffff00", "#00d4ff", "#00ff00", "#ff00ff"],
 )
 
 

@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# smoke_test.fg — headless pipeline test (no GUI required)
+#
+# Proves the full channel pipeline:
+#   nmea_sim.tick()  →  emit nmea_raw_sentence
+#                    →  on nmea_raw_sentence (instruments)  →  g_log_line updated
+#                    →  on nmea_raw_sentence (nmea_parser)  →  instrument channels
+#                    →  on nmea_raw_sentence (logger)       →  sentence counted
+#
+# Run:  ./forge run apps/forge_instruments/smoke_test.fg
+# ─────────────────────────────────────────────────────────────────────────────
+
+import nmea_sim
+import nmea_parser
+import logger
+
+# ── channels (same declarations as instruments.fg) ──────────────────────────
+
+channel nmea_raw_sentence : str
+channel position_update   : str
+channel speed_update      : str
+channel heading_update    : str
+channel depth_update      : str
+channel wind_update       : str
+channel ais_target_update : str
+channel alarm_event       : str
+
+# ── display state (mirrors instruments.fg globals) ───────────────────────────
+
+var g_log_line  : str = ""
+var rx_count    : int = 0
+
+# ── on-handlers ──────────────────────────────────────────────────────────────
+
+on nmea_raw_sentence as raw:
+    g_log_line = raw
+    rx_count   = rx_count + 1
+
+on position_update as pos:
+    print("  [position]  " + pos)
+
+on speed_update as spd:
+    print("  [speed]     " + spd)
+
+on heading_update as hdg:
+    print("  [heading]   " + hdg)
+
+on depth_update as dep:
+    print("  [depth]     " + dep)
+
+on wind_update as wnd:
+    print("  [wind]      " + wnd)
+
+# ── main ─────────────────────────────────────────────────────────────────────
+
+proc main() -> void:
+    print("=== FORGE Instruments — smoke test ===")
+    print("")
+
+    nmea_sim.start()
+
+    # Run 3 ticks.  tick=1 and tick=3 emit GGA+RMC only.
+    # tick=2 also emits DPT, MWV, HDT (the % 2 branch in nmea_sim).
+    var tick: int = 0
+    loop:
+        if tick >= 3:
+            print("")
+            print("--- tick loop done ---")
+            print("sentences received : " + str(rx_count))
+            print("last raw sentence  : " + g_log_line)
+            print("logger enabled     : " + str(logger.is_enabled()))
+            print("logger count       : " + str(logger.sentence_count()))
+            print("")
+            print("=== smoke test PASSED ===")
+            return
+
+        print("--- tick " + str(tick + 1) + " ---")
+        nmea_sim.tick()
+        tick = tick + 1

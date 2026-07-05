@@ -1,0 +1,237 @@
+# nmea_terminal.fg — NMEA 0183 Serial Terminal
+#
+# A GUI serial terminal for viewing NMEA data, inspired by PyTerm.
+# Uses forge.gui, forge.serial, and forge.nmea modules.
+#
+# Build:  make GUI=1
+# Run:    ./forge run examples/nmea_terminal.fg
+
+import forge.gui
+import forge.serial
+import forge.nmea
+import forge.io
+import forge.str
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Constants
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Baud rate options (semicolon-separated for dropdown)
+var BAUD_OPTIONS: str = "4800;9600;19200;38400;57600;115200"
+
+# Layout constants
+var WIN_W: int = 900
+var WIN_H: int = 650
+var TOOLBAR_Y: int = 8
+var LOG_X: int = 10
+var LOG_Y: int = 50
+var LOG_W: int = 700
+var LOG_H: int = 450
+var SIDEBAR_X: int = 720
+var SIDEBAR_Y: int = 70
+var SIDEBAR_W: int = 170
+var STATUS_Y: int = 600
+var INPUT_Y: int = 550
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: get baud rate from dropdown index
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc baud_from_index(idx: int) -> int:
+    if idx == 0:
+        return 4800
+    if idx == 1:
+        return 9600
+    if idx == 2:
+        return 19200
+    if idx == 3:
+        return 38400
+    if idx == 4:
+        return 57600
+    if idx == 5:
+        return 115200
+    return 9600
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+proc main() -> void:
+    gui.init_window(WIN_W, WIN_H, "FORGE NMEA Terminal")
+    gui.set_target_fps(60)
+    gui.set_style_light()
+
+    var font_id: int = gui.load_font("/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf", 22)
+    if font_id >= 0:
+        gui.set_font(font_id)
+
+    # ── State ──
+    var serial_handle: int = -1
+    var port_path: str = "/tmp/ttyV1"
+    var baud_idx: int = 0
+    var is_paused: bool = false
+    var nmea_tracking: bool = true
+    var line_count: int = 0
+    var rx_flash: int = 0
+    var tx_flash: int = 0
+
+    # NMEA identifier tracking (simple array of up to 20 identifiers)
+    var nmea_ids: str = ""
+    var nmea_id_count: int = 0
+
+    # Create the main scrollable log (id=0)
+    gui.log_create(0, LOG_X, LOG_Y, LOG_W, LOG_H, 4096, 16)
+
+    # Create NMEA identifiers log (id=1) — smaller, sidebar
+    gui.log_create(1, SIDEBAR_X, SIDEBAR_Y, SIDEBAR_W, 510, 100, 18)
+
+    # Command input buffer
+    var cmd_text: str = ""
+
+    # ── Main Loop ──
+
+    while gui.window_open():
+        gui.begin_draw()
+        gui.clear(30, 30, 35, 255)
+
+        # ── Title Bar ──
+        gui.draw_rect(0, 0, WIN_W, 42, 25, 55, 95, 255)
+        gui.draw_text("FORGE NMEA Terminal", 10, 10, 22, 255, 255, 255, 255)
+
+        # FPS display
+        gui.draw_text("FPS: " + str(gui.get_fps()), WIN_W - 80, 14, 14, 150, 150, 150, 255)
+
+        # ── Toolbar Buttons ──
+        var btn_y: int = LOG_Y + LOG_H + 8
+
+        # Port Open/Close toggle
+        if serial_handle >= 0:
+            if gui.color_button(10, btn_y, 100, 30, "PRT Open", 0, 180, 0, 255, 0, 0, 0, 255):
+                forge.serial.close(serial_handle)
+                serial_handle = -1
+                gui.log_add(0, "── Port closed ──", 255, 200, 0, 255)
+        else:
+            if gui.color_button(10, btn_y, 100, 30, "PRT Closed", 180, 0, 0, 255, 255, 255, 255, 255):
+                var baud: int = baud_from_index(baud_idx)
+                serial_handle = forge.serial.open(port_path, baud)
+                if serial_handle >= 0:
+                    forge.serial.set_timeout(serial_handle, 10)
+                    gui.log_add(0, "── Port opened: " + port_path + " @ " + str(baud) + " ──", 0, 255, 100, 255)
+                else:
+                    gui.log_add(0, "── ERROR: Could not open " + port_path + " ──", 255, 60, 60, 255)
+
+        # Clear button
+        if gui.color_button(120, btn_y, 80, 30, "Clear", 80, 80, 90, 255, 220, 220, 220, 255):
+            gui.log_clear(0)
+            gui.log_clear(1)
+            nmea_ids = ""
+            nmea_id_count = 0
+            line_count = 0
+
+        # Pause toggle
+        if is_paused:
+            if gui.color_button(210, btn_y, 120, 30, "Start RCV", 0, 160, 0, 255, 0, 0, 0, 255):
+                is_paused = false
+        else:
+            if gui.color_button(210, btn_y, 120, 30, "Pause RCV", 80, 80, 90, 255, 220, 220, 220, 255):
+                is_paused = true
+
+        # NMEA Track toggle
+        if nmea_tracking:
+            if gui.color_button(340, btn_y, 120, 30, "Stop Track", 0, 160, 0, 255, 0, 0, 0, 255):
+                nmea_tracking = false
+        else:
+            if gui.color_button(340, btn_y, 120, 30, "Track NMEA", 80, 80, 90, 255, 220, 220, 220, 255):
+                nmea_tracking = true
+
+        # ── TX/RX Indicators ──
+        var ind_x: int = 500
+        gui.draw_text("TX:", ind_x, btn_y + 7, 14, 180, 180, 180, 255)
+        if tx_flash > 0:
+            gui.draw_circle(ind_x + 30, btn_y + 14, 6.0, 255, 255, 0, 255)
+            tx_flash = tx_flash - 1
+        else:
+            gui.draw_circle(ind_x + 30, btn_y + 14, 6.0, 80, 80, 80, 255)
+
+        gui.draw_text("RX:", ind_x + 50, btn_y + 7, 14, 180, 180, 180, 255)
+        if rx_flash > 0:
+            gui.draw_circle(ind_x + 80, btn_y + 14, 6.0, 255, 255, 0, 255)
+            rx_flash = rx_flash - 1
+        else:
+            gui.draw_circle(ind_x + 80, btn_y + 14, 6.0, 80, 80, 80, 255)
+
+        # ── Send CMD / Send buttons ──
+        if gui.color_button(630, btn_y, 80, 30, "Send CMD", 80, 80, 90, 255, 220, 220, 220, 255):
+            if serial_handle >= 0:
+                forge.serial.write_str(serial_handle, cmd_text + "\r\n")
+                gui.log_add(0, "TX> " + cmd_text, 100, 200, 255, 255)
+                tx_flash = 6
+                cmd_text = ""
+
+        # ── Command Input ──
+        gui.draw_text("CMD:", 10, INPUT_Y + 5, 14, 180, 180, 180, 255)
+        cmd_text = gui.textbox(50, INPUT_Y, 660, 28, cmd_text, 256)
+
+        # ── Read Serial Data ──
+        if serial_handle >= 0 and is_paused == false:
+            var avail: int = forge.serial.bytes_available(serial_handle)
+            if avail > 0:
+                var data: str = forge.serial.read_line(serial_handle)
+                if forge.str.len(data) > 0:
+                    rx_flash = 6
+                    line_count = line_count + 1
+
+                    # NMEA processing
+                    if nmea_tracking and forge.nmea.validate(data) > 0:
+                        # Get sentence identifier (includes talker prefix, e.g. "GPGLL")
+                        var ident: str = forge.nmea.sentence_type(data)
+
+                        # Track identifier
+                        if forge.str.contains(nmea_ids, ident) == false:
+                            nmea_ids = nmea_ids + ident + ";"
+                            nmea_id_count = nmea_id_count + 1
+                            gui.log_add(1, ident, 255, 255, 0, 255)
+
+                        # Add colorized to log — green for valid NMEA
+                        gui.log_add(0, data, 0, 255, 150, 255)
+                    else:
+                        # Non-NMEA data or tracking disabled — white
+                        gui.log_add(0, data, 220, 220, 220, 255)
+
+        # ── Draw Log Panels ──
+        gui.log_draw(0)
+
+        # NMEA Identifiers sidebar
+        gui.draw_text("NMEA IDs", SIDEBAR_X + 30, SIDEBAR_Y - 18, 16, 200, 200, 255, 255)
+        gui.log_draw(1)
+
+        # ── Status Bar ──
+        gui.draw_rect(0, STATUS_Y, WIN_W, 50, 20, 20, 25, 255)
+        gui.draw_line(0, STATUS_Y, WIN_W, STATUS_Y, 60, 60, 80, 255)
+
+        var status: str = "Port: " + port_path
+        status = status + " | Baud: " + str(baud_from_index(baud_idx))
+        if serial_handle >= 0:
+            status = status + " | Status: Open"
+        else:
+            status = status + " | Status: Closed"
+        status = status + " | Lines: " + str(line_count)
+        if is_paused:
+            status = status + " | PAUSED"
+
+        gui.draw_text(status, 10, STATUS_Y + 8, 14, 160, 160, 160, 255)
+
+        # ── Port Settings (top-right, drawn last for dropdown overlay) ──
+        gui.draw_text("Port:", WIN_W - 310, 14, 14, 180, 180, 180, 255)
+        port_path = gui.textbox(WIN_W - 270, 8, 120, 26, port_path, 64)
+
+        gui.draw_text("Baud:", WIN_W - 140, 14, 14, 180, 180, 180, 255)
+        baud_idx = gui.dropdown(WIN_W - 100, 8, 90, 26, BAUD_OPTIONS, baud_idx)
+
+        gui.end_draw()
+
+    # ── Cleanup ──
+    if serial_handle >= 0:
+        forge.serial.close(serial_handle)
+
+    gui.close_window()
