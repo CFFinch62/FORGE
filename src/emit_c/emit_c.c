@@ -145,13 +145,32 @@ static void emit_escaped_string(forge_emitter_t* e, const char* str) {
     fputc('"', e->out);
 }
 
+/* Format a double as a C floating-point literal, guaranteeing the text
+ * contains a '.' or exponent marker. "%g" alone prints whole-number
+ * values like 1.0 or 16.0 as "1"/"16", which C then parses as *integer*
+ * literals — turning constants like `1.0 / 16.0` into integer division
+ * (result 0) instead of the intended float division. */
+static void emit_float_literal(forge_emitter_t* e, double val) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.17g", val);
+    int needs_suffix = 1;
+    for (const char* p = buf; *p; p++) {
+        if (*p == '.' || *p == 'e' || *p == 'E' ||
+            *p == 'n' || *p == 'N' /* nan/inf */) {
+            needs_suffix = 0;
+            break;
+        }
+    }
+    EMIT(e, "%s%s", buf, needs_suffix ? ".0" : "");
+}
+
 static void emit_literal(forge_emitter_t* e, forge_node_t* node) {
     switch (node->kind) {
         case NODE_INT_LIT:
             EMIT(e, "%lldLL", node->data.int_val);
             break;
         case NODE_FLOAT_LIT:
-            EMIT(e, "%g", node->data.float_val);
+            emit_float_literal(e, node->data.float_val);
             break;
         case NODE_STR_LIT:
             EMIT(e, "forge_str_lit(");
@@ -267,6 +286,13 @@ void emit_expr(forge_emitter_t* e, forge_node_t* node) {
                     emit_expr(e, node->data.array_lit.elements[i]);
                 }
                 EMIT(e, "}, %d)", count);
+            } else if (elem_type && (elem_type->kind == TY_DYN_ARRAY || elem_type->kind == TY_FIXED_ARRAY)) {
+                EMIT(e, "forge_array_from_arrays((forge_array_t[]){");
+                for (int i = 0; i < count; i++) {
+                    if (i > 0) EMIT(e, ", ");
+                    emit_expr(e, node->data.array_lit.elements[i]);
+                }
+                EMIT(e, "}, %d)", count);
             } else {
                 /* Fallback - assume int */
                 EMIT(e, "forge_array_from_ints((int64_t[]){");
@@ -354,6 +380,14 @@ void emit_expr(forge_emitter_t* e, forge_node_t* node) {
                             /* str -> str is a no-op */
                             emit_expr(e, inner);
                             break;
+                        case TY_BYTE:
+                            /* byte -> str builds a real length-1 string
+                             * (a raw cast to forge_str_t is invalid C since
+                             * forge_str_t is a struct, not a scalar). */
+                            EMIT(e, "forge_str_from_char(");
+                            emit_expr(e, inner);
+                            EMIT(e, ")");
+                            break;
                         default:
                             /* Fallback: try to cast */
                             EMIT(e, "((forge_str_t)(");
@@ -372,6 +406,15 @@ void emit_expr(forge_emitter_t* e, forge_node_t* node) {
                      target_type->kind == TY_INT32)) {
                 if (source_type && source_type->kind == TY_STR) {
                     EMIT(e, "forge_str_to_int(");
+                    emit_expr(e, inner);
+                    EMIT(e, ")");
+                } else if (source_type && source_type->kind == TY_BYTE) {
+                    /* A byte here represents a digit character (the only
+                     * source of TY_BYTE is indexing a str); parse its
+                     * decimal digit value rather than widening the raw
+                     * ASCII code point, matching the interpreter's
+                     * strtoll-on-length-1-string behavior. */
+                    EMIT(e, "forge_char_to_digit(");
                     emit_expr(e, inner);
                     EMIT(e, ")");
                 } else {

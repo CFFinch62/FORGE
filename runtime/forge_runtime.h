@@ -40,6 +40,8 @@ void forge_str_free(forge_str_t* s);
 forge_str_t forge_str_from_int(int64_t i);
 forge_str_t forge_str_from_float(double f);
 forge_str_t forge_str_from_bool(int b);
+forge_str_t forge_str_from_char(uint8_t c);
+int64_t forge_char_to_digit(uint8_t c);
 
 /* Convert from string */
 int64_t forge_str_to_int(forge_str_t s);
@@ -87,6 +89,7 @@ forge_array_t forge_array_from_ints(int64_t* vals, int count);
 forge_array_t forge_array_from_floats(double* vals, int count);
 forge_array_t forge_array_from_bools(int* vals, int count);
 forge_array_t forge_array_from_strs(forge_str_t* vals, int count);
+forge_array_t forge_array_from_arrays(forge_array_t* vals, int count);
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Map Type

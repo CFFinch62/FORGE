@@ -93,6 +93,19 @@ forge_str_t forge_str_from_bool(int b) {
     return forge_str_lit(b ? "true" : "false");
 }
 
+/* Build a length-1 owned string from a single byte/character value. */
+forge_str_t forge_str_from_char(uint8_t c) {
+    return forge_str_dup((const char*)&c, 1);
+}
+
+/* Parse a single decimal-digit character to its numeric value, matching
+ * the interpreter's behavior of treating an indexed string byte as a
+ * length-1 string and running it through strtoll. */
+int64_t forge_char_to_digit(uint8_t c) {
+    char buf[2] = { (char)c, '\0' };
+    return strtoll(buf, NULL, 10);
+}
+
 int64_t forge_str_to_int(forge_str_t s) {
     /* Need to null-terminate for strtoll */
     char buf[64];
@@ -205,6 +218,14 @@ forge_array_t forge_array_from_bools(int* vals, int count) {
 
 forge_array_t forge_array_from_strs(forge_str_t* vals, int count) {
     forge_array_t arr = forge_array_create(sizeof(forge_str_t), count > 0 ? count : 1);
+    for (int i = 0; i < count; i++) {
+        forge_array_push(&arr, &vals[i]);
+    }
+    return arr;
+}
+
+forge_array_t forge_array_from_arrays(forge_array_t* vals, int count) {
+    forge_array_t arr = forge_array_create(sizeof(forge_array_t), count > 0 ? count : 1);
     for (int i = 0; i < count; i++) {
         forge_array_push(&arr, &vals[i]);
     }
