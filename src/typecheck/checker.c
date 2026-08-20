@@ -1245,7 +1245,8 @@ forge_type_t* checker_type_of(forge_checker_t* checker, forge_node_t* node) {
                                    strcmp(stdlib_func, "is_open") == 0 ||
                                    strcmp(stdlib_func, "get_baud") == 0) {
                             result = type_prim(checker->arena, TY_INT);
-                        } else if (strcmp(stdlib_func, "read_line") == 0) {
+                        } else if (strcmp(stdlib_func, "read_line") == 0 ||
+                                   strcmp(stdlib_func, "last_error") == 0) {
                             result = type_prim(checker->arena, TY_STR);
                         } else {
                             /* close, write_byte, write_str, set_timeout, flush -> void */

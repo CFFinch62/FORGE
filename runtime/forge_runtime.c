@@ -1532,6 +1532,7 @@ typedef struct {
 
 static forge_serial_t g_serial_pool[FORGE_SERIAL_POOL_SIZE];
 static int g_serial_pool_init = 0;
+static char g_serial_last_error[256] = "";
 
 static void serial_pool_init(void) {
     if (g_serial_pool_init) return;
@@ -1573,7 +1574,9 @@ int64_t forge_serial_open(forge_str_t path, int64_t baud) {
         }
     }
     if (slot < 0) {
-        fprintf(stderr, "forge.serial.open: serial port pool exhausted\n");
+        snprintf(g_serial_last_error, sizeof(g_serial_last_error),
+                 "serial port pool exhausted (max %d already open)", FORGE_SERIAL_POOL_SIZE);
+        fprintf(stderr, "forge.serial.open: %s\n", g_serial_last_error);
         return -1;
     }
 
@@ -1584,15 +1587,22 @@ int64_t forge_serial_open(forge_str_t path, int64_t baud) {
 
     /* Open port */
     int fd = open(path_str, O_RDWR | O_NOCTTY | O_NONBLOCK);
-    free(path_str);
 
     if (fd < 0) {
+        snprintf(g_serial_last_error, sizeof(g_serial_last_error),
+                 "open '%s' failed: %s", path_str, strerror(errno));
+        fprintf(stderr, "forge.serial.open: %s\n", g_serial_last_error);
+        free(path_str);
         return -1;
     }
 
     /* Save original settings */
     struct termios tty;
     if (tcgetattr(fd, &g_serial_pool[slot].orig) != 0) {
+        snprintf(g_serial_last_error, sizeof(g_serial_last_error),
+                 "tcgetattr '%s' failed: %s", path_str, strerror(errno));
+        fprintf(stderr, "forge.serial.open: %s\n", g_serial_last_error);
+        free(path_str);
         close(fd);
         return -1;
     }
@@ -1611,9 +1621,15 @@ int64_t forge_serial_open(forge_str_t path, int64_t baud) {
     cfsetospeed(&tty, speed);
 
     if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+        snprintf(g_serial_last_error, sizeof(g_serial_last_error),
+                 "tcsetattr '%s' failed: %s", path_str, strerror(errno));
+        fprintf(stderr, "forge.serial.open: %s\n", g_serial_last_error);
+        free(path_str);
         close(fd);
         return -1;
     }
+    free(path_str);
+    g_serial_last_error[0] = '\0';
 
     /* Clear non-blocking for normal operation */
     int flags = fcntl(fd, F_GETFL, 0);
@@ -1631,6 +1647,16 @@ int64_t forge_serial_open(forge_str_t path, int64_t baud) {
 int64_t forge_serial_open_ptr(forge_str_t* path, int64_t baud) {
     if (!path) return -1;
     return forge_serial_open(*path, baud);
+}
+
+/* Reason the most recent forge_serial_open() call failed, or "" if the
+ * last call succeeded. */
+forge_str_t forge_serial_last_error(void) {
+    return forge_str_dup(g_serial_last_error, (int)strlen(g_serial_last_error));
+}
+
+void forge_serial_last_error_ptr(forge_str_t* out) {
+    if (out) *out = forge_serial_last_error();
 }
 
 void forge_serial_close(int64_t handle) {

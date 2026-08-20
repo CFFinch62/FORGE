@@ -114,6 +114,7 @@ var g_baud_idx      : int  = 0        # 0=4800 1=9600 2=38400 3=115200
 var g_mode          : str  = "LIVE"   # "SIM" or "LIVE" — sim does NOT auto-start
 var g_connected     : bool = false
 var g_paused        : bool = false    # freeze log + display updates
+var g_last_error    : str  = ""       # reason the last Connect attempt failed
 
 # ── display / font state ──────────────────────────────────────────────────────
 var g_font_size_idx : int  = 1        # 0=Small 1=Medium 2=Large 3=XLarge
@@ -1068,12 +1069,17 @@ proc draw_settings_panel() -> void:
                 nmea_sim.stop()
                 g_connected = true
                 g_mode = "LIVE"
+                g_last_error = ""
                 save_settings()
+            else:
+                g_last_error = serial_reader.last_error()
 
     if g_connected:
         forge.gui.draw_text("Connected: " + g_port_str, 330, 305, 12, 60, 210, 100, 255)
     elif g_mode == "SIM":
         forge.gui.draw_text("Stop SIM to enable serial connection", 330, 305, 12, 180, 100, 40, 255)
+    elif forge.str.len(g_last_error) > 0:
+        forge.gui.draw_text("Not connected: " + g_last_error, 330, 305, 12, 200, 120, 60, 255)
     else:
         forge.gui.draw_text("Not connected", 330, 305, 12, 200, 120, 60, 255)
 

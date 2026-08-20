@@ -340,6 +340,7 @@ static void emit_runtime_declarations(forge_llvm_emitter_t* e) {
     LLVM_EMITLN(e, "; Standard library: forge.serial");
     LLVM_EMITLN(e, "declare i64 @forge_serial_open_ptr(%%forge_str_t*, i64)");
     LLVM_EMITLN(e, "declare void @forge_serial_close(i64)");
+    LLVM_EMITLN(e, "declare void @forge_serial_last_error_ptr(%%forge_str_t*)");
     LLVM_EMITLN(e, "declare i64 @forge_serial_read_byte(i64)");
     LLVM_EMITLN(e, "declare i64 @forge_serial_bytes_available(i64)");
     LLVM_EMITLN(e, "declare void @forge_serial_read_line_ptr(%%forge_str_t*, i64)");
@@ -1591,6 +1592,16 @@ int llvm_emit_expr(forge_llvm_emitter_t* e, forge_node_t* node) {
                     }
                     LLVM_EMITLN(e, ")");
                     return -1;
+                }
+
+                /* last_error: 0 args, returns string via ptr wrapper */
+                if (strcmp(serial_func, "last_error") == 0) {
+                    int tmp = llvm_next_reg(e);
+                    LLVM_EMITLN(e, "  %%%d = alloca %%forge_str_t", tmp);
+                    LLVM_EMITLN(e, "  call void @forge_serial_last_error_ptr(%%forge_str_t* %%%d)", tmp);
+                    reg = llvm_next_reg(e);
+                    LLVM_EMITLN(e, "  %%%d = load %%forge_str_t, %%forge_str_t* %%%d", reg, tmp);
+                    return reg;
                 }
 
                 /* read_byte, bytes_available, is_open, get_baud: 1 int arg, returns int */

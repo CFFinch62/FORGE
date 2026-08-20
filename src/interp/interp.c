@@ -3531,6 +3531,15 @@ static int try_stdlib_serial(forge_interp_t* interp, const char* proc_name,
         return 1;
     }
 
+    if (strcmp(proc_name, "last_error") == 0) {
+        forge_str_t msg = forge_serial_last_error();
+        char* copy = (char*)forge_malloc((size_t)(msg.len + 1));
+        memcpy(copy, msg.data, (size_t)msg.len);
+        copy[msg.len] = '\0';
+        *result = val_str_own(copy, msg.len);
+        return 1;
+    }
+
     if (strcmp(proc_name, "read_byte") == 0) {
         if (arg_count > 0 && args[0].kind == VAL_INT) {
             int64_t byte = forge_serial_read_byte(args[0].as.i);

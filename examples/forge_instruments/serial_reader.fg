@@ -51,6 +51,10 @@ proc close() -> void:
 proc is_open() -> bool:
     return port_open
 
+# Reason the most recent open() call failed, or "" if it succeeded.
+proc last_error() -> str:
+    return forge.serial.last_error()
+
 # Call once per render frame.
 # Uses non-blocking read_byte so the GUI never stalls waiting for data.
 # Accumulates bytes into line_buf; emits on nmea_raw_sentence when '\n' (10)

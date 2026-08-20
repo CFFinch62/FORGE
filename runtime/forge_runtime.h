@@ -450,6 +450,10 @@ void forge_buf_to_hex_ptr(forge_str_t* out, int64_t handle);  /* ABI wrapper */
 int64_t forge_serial_open(forge_str_t path, int64_t baud);
 int64_t forge_serial_open_ptr(forge_str_t* path, int64_t baud);  /* ABI wrapper */
 
+/* Reason the most recent forge_serial_open() call failed, or "" on success */
+forge_str_t forge_serial_last_error(void);
+void forge_serial_last_error_ptr(forge_str_t* out);  /* ABI wrapper */
+
 /* Close a serial port */
 void forge_serial_close(int64_t handle);
 
